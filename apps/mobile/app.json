@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "BAAL Fantasy HQ",
+    "slug": "baal-fantasy-hq",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#152235"
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "baal-fantasy-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Hosted fantasy football league platform powered by BAAL football-data utilities.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @baal/web",
+    "dev:mobile": "npm run start --workspace @baal/mobile",
+    "build": "npm run build --workspaces --if-present",
+    "build:web": "npm run build --workspace @baal/web",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "overrides": {
+    "postcss": "^8.5.15"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

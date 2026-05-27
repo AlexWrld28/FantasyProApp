@@ -1,25 +1,50 @@
-# BAALproject
+# BAAL Fantasy Platform
 
-Continuation of a school project for searching college football players, viewing team/stadium data, and showing stadium maps.
+BAAL is being expanded from a desktop college-football lookup tool into a private fantasy football league platform for web, iOS, and Android.
 
-## Setup
+## Project Layout
+
+```text
+apps/web                 Next.js hosted league app
+apps/mobile              Expo mobile app shell
+packages/fantasy-engine  Shared scoring and matchup logic
+packages/football-data   BAAL football-data adapters
+supabase                 Database migrations and Edge Functions
+BAALv1.7.py              Original PyQt desktop app
+```
+
+## Web App
+
+```bash
+npm install
+npm run dev:web
+```
+
+The web app includes the first pass of the league dashboard, fantasy scoring screen, roster room, and league settings.
+
+## Supabase
+
+Copy `.env.example` to `.env.local` and fill in:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+CFBD_API_KEY=
+```
+
+Apply `supabase/migrations/0001_initial_schema.sql` to create auth-backed league, team, roster, scoring, matchup, and stat tables.
+
+## Legacy Desktop App
 
 ```bash
 python3 -m pip install -r requirements.txt
 python3 BAALv1.7.py
 ```
 
-If you have your own College Football Data API key, set it before launching:
+If you have a College Football Data API key, set `CFBD_API_KEY` before launching. Player search and stat lookup require a valid key from CollegeFootballData.com.
 
-```bash
-export CFBD_API_KEY="your-api-key"
-```
-
-The app starts without this variable, but player search and stat lookup require a valid key from CollegeFootballData.com.
-
-## Refactor Notes
-
-The app now separates responsibilities using SOLID-oriented classes:
+The legacy app contains the original BAAL capabilities:
 
 - `CollegeFootballClient` owns CFBD API calls.
 - `CsvTeamRepository` owns local CSV loading and team lookup.

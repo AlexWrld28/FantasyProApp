@@ -1,3 +1,12 @@
 .venv/
 __pycache__/
 *.py[cod]
+node_modules/
+.next/
+.expo/
+dist/
+coverage/
+artifacts/
+.env
+.env.local
+npm-debug.log*

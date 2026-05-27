@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-native",
+    "paths": {
+      "@baal/fantasy-engine": ["../../packages/fantasy-engine/src/index.ts"]
+    }
+  },
+  "include": ["App.tsx", "**/*.ts", "**/*.tsx"]
+}
