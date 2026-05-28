@@ -1,6 +1,6 @@
 {
   "installCommand": "npm install",
-  "buildCommand": "npm run build:web",
-  "devCommand": "npm run dev:web",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
   "framework": "nextjs"
 }
