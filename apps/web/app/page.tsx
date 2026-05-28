@@ -2,7 +2,9 @@
 
 import {
   Activity,
+  ArrowLeftRight,
   AtSign,
+  BrainCircuit,
   CalendarClock,
   Check,
   ClipboardList,
@@ -17,6 +19,7 @@ import {
   SlidersHorizontal,
   Search,
   Send,
+  Sparkles,
   Trophy,
   Users,
   Zap
@@ -39,21 +42,33 @@ import {
   leagueMembers,
   leagueTeams,
   recentActivity,
+  tradeTeams,
   waiverTargets,
   type ChatMessage,
   type DirectThread,
-  type Presence
+  type Presence,
+  type TradeAsset,
+  type TradeTeam
 } from "../lib/sample-data";
 import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
 
-type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "map" | "settings";
+type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "trade" | "map" | "settings";
 type ChatMode = "league" | "dm";
+type TradeMode = "win-now" | "balanced" | "keeper";
+
+type TradePreferences = {
+  mode: TradeMode;
+  riskTolerance: number;
+  keeperWeight: number;
+  needWeight: number;
+};
 
 const views: Array<{ key: ViewKey; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { key: "dashboard", label: "Dashboard", icon: Home },
   { key: "scoring", label: "Scoring", icon: Gauge },
   { key: "rosters", label: "Rosters", icon: Users },
   { key: "chat", label: "Chat", icon: MessageCircle },
+  { key: "trade", label: "Trade", icon: ArrowLeftRight },
   { key: "map", label: "Map", icon: MapPinned },
   { key: "settings", label: "Settings", icon: Settings }
 ];
@@ -84,6 +99,8 @@ export default function HomePage() {
   const [rules, setRules] = useState<ScoringRules>(defaultScoringRules);
   const [selectedTeamId, setSelectedTeamId] = useState(leagueTeams[0].id);
   const [selectedStadiumId, setSelectedStadiumId] = useState(stadiumMapEntries[0].id);
+  const [yourTradeTeamId, setYourTradeTeamId] = useState(tradeTeams[0].id);
+  const [partnerTradeTeamId, setPartnerTradeTeamId] = useState(tradeTeams[1].id);
   const [pprEnabled, setPprEnabled] = useState(true);
   const [waiverLock, setWaiverLock] = useState(true);
   const [tradeReview, setTradeReview] = useState(false);
@@ -181,6 +198,14 @@ export default function HomePage() {
           />
         )}
         {activeView === "chat" && <ChatView />}
+        {activeView === "trade" && (
+          <TradeBuilderView
+            partnerTradeTeamId={partnerTradeTeamId}
+            setPartnerTradeTeamId={setPartnerTradeTeamId}
+            setYourTradeTeamId={setYourTradeTeamId}
+            yourTradeTeamId={yourTradeTeamId}
+          />
+        )}
         {activeView === "map" && (
           <MapView selectedStadium={selectedStadium} setSelectedStadiumId={setSelectedStadiumId} />
         )}
@@ -198,6 +223,167 @@ export default function HomePage() {
         )}
       </section>
     </main>
+  );
+}
+
+function TradeBuilderView({
+  partnerTradeTeamId,
+  setPartnerTradeTeamId,
+  setYourTradeTeamId,
+  yourTradeTeamId
+}: {
+  partnerTradeTeamId: string;
+  setPartnerTradeTeamId: (teamId: string) => void;
+  setYourTradeTeamId: (teamId: string) => void;
+  yourTradeTeamId: string;
+}) {
+  const [outgoingIds, setOutgoingIds] = useState<string[]>(["trade-p-4", "trade-p-5"]);
+  const [incomingIds, setIncomingIds] = useState<string[]>(["trade-p-10"]);
+  const [preferences, setPreferences] = useState<TradePreferences>({
+    mode: "win-now",
+    riskTolerance: 52,
+    keeperWeight: 38,
+    needWeight: 72
+  });
+
+  const yourTeam = tradeTeams.find((team) => team.id === yourTradeTeamId) ?? tradeTeams[0];
+  const partnerTeam =
+    tradeTeams.find((team) => team.id === partnerTradeTeamId && team.id !== yourTeam.id) ??
+    tradeTeams.find((team) => team.id !== yourTeam.id) ??
+    tradeTeams[1];
+  const outgoingAssets = yourTeam.assets.filter((asset) => outgoingIds.includes(asset.id));
+  const incomingAssets = partnerTeam.assets.filter((asset) => incomingIds.includes(asset.id));
+  const analysis = analyzeTrade(outgoingAssets, incomingAssets, yourTeam, partnerTeam, preferences);
+
+  function updateYourTeam(teamId: string) {
+    setYourTradeTeamId(teamId);
+    const nextTeam = tradeTeams.find((team) => team.id === teamId) ?? tradeTeams[0];
+    setOutgoingIds(nextTeam.assets.slice(0, 1).map((asset) => asset.id));
+    if (teamId === partnerTeam.id) {
+      const nextPartner = tradeTeams.find((team) => team.id !== teamId) ?? tradeTeams[1];
+      setPartnerTradeTeamId(nextPartner.id);
+      setIncomingIds(nextPartner.assets.slice(0, 1).map((asset) => asset.id));
+    }
+  }
+
+  function updatePartnerTeam(teamId: string) {
+    setPartnerTradeTeamId(teamId);
+    const nextTeam = tradeTeams.find((team) => team.id === teamId) ?? tradeTeams[1];
+    setIncomingIds(nextTeam.assets.slice(0, 1).map((asset) => asset.id));
+  }
+
+  return (
+    <div className="view-grid trade-grid">
+      <section className="section-panel trade-builder-panel">
+        <PanelTitle icon={ArrowLeftRight} title="Trade Builder" />
+        <div className="trade-team-selectors">
+          <label>
+            <span>Your team</span>
+            <select value={yourTeam.id} onChange={(event) => updateYourTeam(event.target.value)}>
+              {tradeTeams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Trade partner</span>
+            <select value={partnerTeam.id} onChange={(event) => updatePartnerTeam(event.target.value)}>
+              {tradeTeams
+                .filter((team) => team.id !== yourTeam.id)
+                .map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="trade-offer-board">
+          <TradeAssetColumn
+            assets={yourTeam.assets}
+            selectedIds={outgoingIds}
+            team={yourTeam}
+            title="You Send"
+            toggleAsset={(assetId) => setOutgoingIds((ids) => toggleId(ids, assetId))}
+          />
+          <div className="trade-center-meter">
+            <span className="trade-meter-label">AI Fairness</span>
+            <strong>{analysis.fairnessScore}</strong>
+            <div className="fairness-bar" aria-label="Trade fairness">
+              <span style={{ width: `${analysis.fairnessScore}%` }} />
+            </div>
+            <p>{analysis.recommendation}</p>
+          </div>
+          <TradeAssetColumn
+            assets={partnerTeam.assets}
+            selectedIds={incomingIds}
+            team={partnerTeam}
+            title="You Receive"
+            toggleAsset={(assetId) => setIncomingIds((ids) => toggleId(ids, assetId))}
+          />
+        </div>
+      </section>
+
+      <section className="section-panel decision-panel">
+        <PanelTitle icon={BrainCircuit} title="AI Decision Lab" />
+        <div className="trade-mode-switch">
+          {(["win-now", "balanced", "keeper"] as TradeMode[]).map((mode) => (
+            <button
+              className={preferences.mode === mode ? "selected" : ""}
+              key={mode}
+              onClick={() => setPreferences((current) => ({ ...current, mode }))}
+              type="button"
+            >
+              {tradeModeLabel(mode)}
+            </button>
+          ))}
+        </div>
+        <PreferenceSlider
+          label="Risk tolerance"
+          value={preferences.riskTolerance}
+          onChange={(riskTolerance) => setPreferences((current) => ({ ...current, riskTolerance }))}
+        />
+        <PreferenceSlider
+          label="Keeper upside"
+          value={preferences.keeperWeight}
+          onChange={(keeperWeight) => setPreferences((current) => ({ ...current, keeperWeight }))}
+        />
+        <PreferenceSlider
+          label="Need fit"
+          value={preferences.needWeight}
+          onChange={(needWeight) => setPreferences((current) => ({ ...current, needWeight }))}
+        />
+        <div className="need-chip-row">
+          {yourTeam.needs.map((need) => (
+            <span key={need}>{need} need</span>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-panel analytics-panel">
+        <PanelTitle icon={Sparkles} title="Trade AI Analytics" />
+        <div className="trade-grade-row">
+          <Metric label="You receive" value={analysis.incomingValue.toFixed(1)} />
+          <Metric label="You send" value={analysis.outgoingValue.toFixed(1)} />
+          <Metric label="Net edge" value={signedNumber(analysis.netEdge)} />
+        </div>
+        <div className="ai-verdict">
+          <strong>{analysis.verdict}</strong>
+          <p>{analysis.summary}</p>
+        </div>
+        <div className="insight-list">
+          {analysis.insights.map((insight) => (
+            <div className="insight-row" key={insight}>
+              <Check size={15} />
+              <span>{insight}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -356,6 +542,81 @@ function ChatView() {
         </div>
       </section>
     </div>
+  );
+}
+
+function TradeAssetColumn({
+  assets,
+  selectedIds,
+  team,
+  title,
+  toggleAsset
+}: {
+  assets: TradeAsset[];
+  selectedIds: string[];
+  team: TradeTeam;
+  title: string;
+  toggleAsset: (assetId: string) => void;
+}) {
+  const selectedAssets = assets.filter((asset) => selectedIds.includes(asset.id));
+  const selectedValue = selectedAssets.reduce((sum, asset) => sum + asset.tradeValue, 0);
+
+  return (
+    <div className="trade-asset-column">
+      <div className="trade-column-header">
+        <div>
+          <p className="eyebrow">{team.manager}</p>
+          <h3>{title}</h3>
+          <span>{team.name}</span>
+        </div>
+        <b>{selectedValue}</b>
+      </div>
+      <div className="trade-asset-list">
+        {assets.map((asset) => {
+          const selected = selectedIds.includes(asset.id);
+          return (
+            <button
+              className={selected ? "trade-asset selected" : "trade-asset"}
+              key={asset.id}
+              onClick={() => toggleAsset(asset.id)}
+              type="button"
+            >
+              <span className={`asset-position ${asset.position.toLowerCase()}`}>{asset.position}</span>
+              <span className="asset-main">
+                <strong>{asset.name}</strong>
+                <small>
+                  {asset.nflTeam} | {asset.rosterSlot} | {asset.trend}
+                </small>
+              </span>
+              <span className="asset-value">
+                <b>{asset.tradeValue}</b>
+                <small>{asset.projectedPoints ? `${asset.projectedPoints.toFixed(1)} ppg` : asset.note}</small>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PreferenceSlider({
+  label,
+  onChange,
+  value
+}: {
+  label: string;
+  onChange: (value: number) => void;
+  value: number;
+}) {
+  return (
+    <label className="preference-slider">
+      <span>
+        <strong>{label}</strong>
+        <b>{value}</b>
+      </span>
+      <input type="range" min="0" max="100" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
   );
 }
 
@@ -833,6 +1094,8 @@ function viewTitle(view: ViewKey): string {
       return "Roster Room";
     case "chat":
       return "League Chat";
+    case "trade":
+      return "Trade Builder";
     case "map":
       return "Team Map";
     case "settings":
@@ -844,4 +1107,143 @@ function viewTitle(view: ViewKey): string {
 
 function formatCapacity(capacity: number | null): string {
   return capacity?.toLocaleString() ?? "N/A";
+}
+
+function analyzeTrade(
+  outgoingAssets: TradeAsset[],
+  incomingAssets: TradeAsset[],
+  yourTeam: TradeTeam,
+  partnerTeam: TradeTeam,
+  preferences: TradePreferences
+) {
+  const outgoingValue = adjustedAssetTotal(outgoingAssets, yourTeam, preferences);
+  const incomingValue = adjustedAssetTotal(incomingAssets, yourTeam, preferences);
+  const netEdge = roundOne(incomingValue - outgoingValue);
+  const rawGap = Math.abs(netEdge);
+  const fairnessScore = clamp(Math.round(98 - rawGap * 1.8), 12, 99);
+  const incomingNeedHits = incomingAssets.filter((asset) => yourTeam.needs.includes(asset.position)).length;
+  const outgoingNeedHits = outgoingAssets.filter((asset) => yourTeam.needs.includes(asset.position)).length;
+  const incomingRisk = average(incomingAssets.map((asset) => asset.risk));
+  const outgoingRisk = average(outgoingAssets.map((asset) => asset.risk));
+  const incomingKeeper = average(incomingAssets.map((asset) => asset.keeperGrade));
+  const outgoingKeeper = average(outgoingAssets.map((asset) => asset.keeperGrade));
+  const incomingWeeklyPoints = incomingAssets.reduce((sum, asset) => sum + asset.projectedPoints, 0);
+  const outgoingWeeklyPoints = outgoingAssets.reduce((sum, asset) => sum + asset.projectedPoints, 0);
+
+  const verdict =
+    netEdge >= 12
+      ? "Accept if the other manager will click it"
+      : netEdge >= 3
+        ? "Slight lean accept"
+        : netEdge <= -12
+          ? "Decline or ask for a premium asset"
+          : netEdge <= -3
+            ? "Counter for a sweetener"
+            : "Fair framework";
+
+  const recommendation =
+    fairnessScore >= 82
+      ? "Balanced offer"
+      : netEdge > 0
+        ? "Favors your side"
+        : "Favors their side";
+
+  const insights = [
+    incomingNeedHits > outgoingNeedHits
+      ? `Improves your stated ${yourTeam.needs.join("/")} need profile.`
+      : "Does not strongly solve your top roster needs yet.",
+    incomingWeeklyPoints >= outgoingWeeklyPoints
+      ? `Adds ${roundOne(incomingWeeklyPoints - outgoingWeeklyPoints)} projected weekly points.`
+      : `Costs ${roundOne(outgoingWeeklyPoints - incomingWeeklyPoints)} projected weekly points.`,
+    incomingRisk <= outgoingRisk
+      ? "Lowers aggregate injury/role risk."
+      : "Raises volatility, so your risk slider matters here.",
+    incomingKeeper >= outgoingKeeper
+      ? "Improves keeper/dynasty optionality."
+      : "Trades away more long-term insulation than it receives.",
+    partnerTeam.style === "retooling"
+      ? `${partnerTeam.manager} may value picks and keeper assets more than pure weekly points.`
+      : `${partnerTeam.manager} is positioned to care about usable starter points.`
+  ];
+
+  const summary =
+    preferences.mode === "win-now"
+      ? "Automatic grading is emphasizing weekly starter points and need fit."
+      : preferences.mode === "keeper"
+        ? "Automatic grading is emphasizing keeper grade, age curve, and future assets."
+        : "Automatic grading is balancing current points, future value, and risk.";
+
+  return {
+    fairnessScore,
+    incomingValue: roundOne(incomingValue),
+    insights,
+    netEdge,
+    outgoingValue: roundOne(outgoingValue),
+    recommendation,
+    summary,
+    verdict
+  };
+}
+
+function adjustedAssetTotal(assets: TradeAsset[], team: TradeTeam, preferences: TradePreferences): number {
+  return assets.reduce((sum, asset) => sum + adjustedAssetValue(asset, team, preferences), 0);
+}
+
+function adjustedAssetValue(asset: TradeAsset, team: TradeTeam, preferences: TradePreferences): number {
+  const mode = tradeModeWeights(preferences.mode);
+  const needBonus = team.needs.includes(asset.position) ? (preferences.needWeight / 100) * 12 : 0;
+  const projectedBonus = asset.projectedPoints * mode.pointsWeight;
+  const keeperBonus = (asset.keeperGrade / 100) * preferences.keeperWeight * mode.keeperWeight;
+  const riskPenalty = asset.risk * ((100 - preferences.riskTolerance) / 100) * 0.34;
+  const trendBonus = asset.trend === "rising" ? 5 : asset.trend === "falling" ? -4 : 1;
+  const futureAssetBonus = asset.position === "PICK" ? mode.pickWeight : asset.position === "FAAB" ? 2 : 0;
+  const ageBonus = asset.age && asset.age <= 25 ? mode.ageWeight : asset.age && asset.age >= 30 ? -mode.ageWeight : 0;
+
+  return asset.tradeValue + needBonus + projectedBonus + keeperBonus + trendBonus + futureAssetBonus + ageBonus - riskPenalty;
+}
+
+function tradeModeWeights(mode: TradeMode) {
+  switch (mode) {
+    case "keeper":
+      return { ageWeight: 5, keeperWeight: 0.54, pickWeight: 9, pointsWeight: 0.34 };
+    case "balanced":
+      return { ageWeight: 3, keeperWeight: 0.38, pickWeight: 4, pointsWeight: 0.58 };
+    default:
+      return { ageWeight: 1, keeperWeight: 0.18, pickWeight: -6, pointsWeight: 0.86 };
+  }
+}
+
+function tradeModeLabel(mode: TradeMode): string {
+  switch (mode) {
+    case "keeper":
+      return "Keeper";
+    case "balanced":
+      return "Balanced";
+    default:
+      return "Win Now";
+  }
+}
+
+function toggleId(ids: string[], id: string): string[] {
+  return ids.includes(id) ? ids.filter((existingId) => existingId !== id) : [...ids, id];
+}
+
+function signedNumber(value: number): string {
+  return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
+}
+
+function average(values: number[]): number {
+  if (!values.length) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function roundOne(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

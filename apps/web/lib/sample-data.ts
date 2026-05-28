@@ -384,3 +384,351 @@ export const directThreads: DirectThread[] = [
     ]
   }
 ];
+
+export type TradeAsset = {
+  id: string;
+  name: string;
+  position: "QB" | "RB" | "WR" | "TE" | "K" | "DST" | "PICK" | "FAAB";
+  nflTeam: string;
+  rosterSlot: string;
+  projectedPoints: number;
+  tradeValue: number;
+  age: number | null;
+  risk: number;
+  trend: "rising" | "steady" | "falling";
+  keeperGrade: number;
+  note: string;
+};
+
+export type TradeTeam = {
+  id: string;
+  name: string;
+  manager: string;
+  record: string;
+  needs: Array<TradeAsset["position"]>;
+  style: "contender" | "balanced" | "retooling";
+  assets: TradeAsset[];
+};
+
+export const tradeTeams: TradeTeam[] = [
+  {
+    id: "trade-team-1",
+    name: "Fourth Down Syndicate",
+    manager: "Aazma",
+    record: "8-3",
+    needs: ["RB", "TE"],
+    style: "contender",
+    assets: [
+      {
+        id: "trade-p-1",
+        name: "Caleb Williams",
+        position: "QB",
+        nflTeam: "CHI",
+        rosterSlot: "QB",
+        projectedPoints: 19.4,
+        tradeValue: 67,
+        age: 24,
+        risk: 34,
+        trend: "rising",
+        keeperGrade: 88,
+        note: "High-upside starter with rushing floor."
+      },
+      {
+        id: "trade-p-2",
+        name: "Bijan Robinson",
+        position: "RB",
+        nflTeam: "ATL",
+        rosterSlot: "RB",
+        projectedPoints: 18.1,
+        tradeValue: 93,
+        age: 24,
+        risk: 18,
+        trend: "rising",
+        keeperGrade: 96,
+        note: "Elite weekly ceiling and long-term anchor."
+      },
+      {
+        id: "trade-p-3",
+        name: "Puka Nacua",
+        position: "WR",
+        nflTeam: "LAR",
+        rosterSlot: "WR",
+        projectedPoints: 16.2,
+        tradeValue: 86,
+        age: 25,
+        risk: 24,
+        trend: "steady",
+        keeperGrade: 91,
+        note: "Volume receiver with strong keeper profile."
+      },
+      {
+        id: "trade-p-4",
+        name: "Deebo Samuel",
+        position: "WR",
+        nflTeam: "SF",
+        rosterSlot: "FLEX",
+        projectedPoints: 13.8,
+        tradeValue: 63,
+        age: 30,
+        risk: 48,
+        trend: "falling",
+        keeperGrade: 58,
+        note: "Playmaker, but health and age add volatility."
+      },
+      {
+        id: "trade-p-5",
+        name: "2026 Round 2 Pick",
+        position: "PICK",
+        nflTeam: "Draft",
+        rosterSlot: "Future",
+        projectedPoints: 0,
+        tradeValue: 36,
+        age: null,
+        risk: 22,
+        trend: "steady",
+        keeperGrade: 76,
+        note: "Useful retooling asset."
+      },
+      {
+        id: "trade-p-6",
+        name: "$18 FAAB",
+        position: "FAAB",
+        nflTeam: "Waiver",
+        rosterSlot: "Budget",
+        projectedPoints: 0,
+        tradeValue: 18,
+        age: null,
+        risk: 12,
+        trend: "steady",
+        keeperGrade: 20,
+        note: "Short-term waiver flexibility."
+      }
+    ]
+  },
+  {
+    id: "trade-team-2",
+    name: "Red Zone Accountants",
+    manager: "Maya",
+    record: "7-4",
+    needs: ["WR", "TE"],
+    style: "contender",
+    assets: [
+      {
+        id: "trade-p-7",
+        name: "Jayden Daniels",
+        position: "QB",
+        nflTeam: "WAS",
+        rosterSlot: "QB",
+        projectedPoints: 20.1,
+        tradeValue: 82,
+        age: 25,
+        risk: 28,
+        trend: "rising",
+        keeperGrade: 94,
+        note: "Dual-threat QB with weekly top-five upside."
+      },
+      {
+        id: "trade-p-8",
+        name: "Jahmyr Gibbs",
+        position: "RB",
+        nflTeam: "DET",
+        rosterSlot: "RB",
+        projectedPoints: 17.6,
+        tradeValue: 91,
+        age: 24,
+        risk: 20,
+        trend: "rising",
+        keeperGrade: 95,
+        note: "Explosive PPR back with premium keeper value."
+      },
+      {
+        id: "trade-p-9",
+        name: "Garrett Wilson",
+        position: "WR",
+        nflTeam: "NYJ",
+        rosterSlot: "WR",
+        projectedPoints: 15.2,
+        tradeValue: 78,
+        age: 26,
+        risk: 30,
+        trend: "steady",
+        keeperGrade: 87,
+        note: "Target hog with stable floor."
+      },
+      {
+        id: "trade-p-10",
+        name: "Trey McBride",
+        position: "TE",
+        nflTeam: "ARI",
+        rosterSlot: "TE",
+        projectedPoints: 12.2,
+        tradeValue: 72,
+        age: 26,
+        risk: 26,
+        trend: "rising",
+        keeperGrade: 89,
+        note: "Premium positional edge at TE."
+      },
+      {
+        id: "trade-p-11",
+        name: "2026 Round 1 Pick",
+        position: "PICK",
+        nflTeam: "Draft",
+        rosterSlot: "Future",
+        projectedPoints: 0,
+        tradeValue: 58,
+        age: null,
+        risk: 18,
+        trend: "steady",
+        keeperGrade: 92,
+        note: "Blue-chip rebuild asset."
+      },
+      {
+        id: "trade-p-12",
+        name: "$24 FAAB",
+        position: "FAAB",
+        nflTeam: "Waiver",
+        rosterSlot: "Budget",
+        projectedPoints: 0,
+        tradeValue: 24,
+        age: null,
+        risk: 12,
+        trend: "steady",
+        keeperGrade: 22,
+        note: "Aggressive waiver firepower."
+      }
+    ]
+  },
+  {
+    id: "trade-team-3",
+    name: "Two Minute Drill",
+    manager: "Jordan",
+    record: "7-4",
+    needs: ["RB", "WR"],
+    style: "balanced",
+    assets: [
+      {
+        id: "trade-p-13",
+        name: "Amon-Ra St. Brown",
+        position: "WR",
+        nflTeam: "DET",
+        rosterSlot: "WR",
+        projectedPoints: 17.9,
+        tradeValue: 95,
+        age: 26,
+        risk: 14,
+        trend: "steady",
+        keeperGrade: 97,
+        note: "Elite target share and week-proof floor."
+      },
+      {
+        id: "trade-p-14",
+        name: "Jonathan Taylor",
+        position: "RB",
+        nflTeam: "IND",
+        rosterSlot: "RB",
+        projectedPoints: 15.8,
+        tradeValue: 74,
+        age: 27,
+        risk: 36,
+        trend: "steady",
+        keeperGrade: 72,
+        note: "Strong contender piece with workload upside."
+      },
+      {
+        id: "trade-p-15",
+        name: "Brock Bowers",
+        position: "TE",
+        nflTeam: "LV",
+        rosterSlot: "TE",
+        projectedPoints: 13.5,
+        tradeValue: 84,
+        age: 23,
+        risk: 20,
+        trend: "rising",
+        keeperGrade: 98,
+        note: "Rare TE asset with elite dynasty profile."
+      },
+      {
+        id: "trade-p-16",
+        name: "2026 Round 3 Pick",
+        position: "PICK",
+        nflTeam: "Draft",
+        rosterSlot: "Future",
+        projectedPoints: 0,
+        tradeValue: 22,
+        age: null,
+        risk: 26,
+        trend: "steady",
+        keeperGrade: 62,
+        note: "Useful sweetener."
+      }
+    ]
+  },
+  {
+    id: "trade-team-4",
+    name: "Waiver Wire Royalty",
+    manager: "Sam",
+    record: "6-5",
+    needs: ["QB", "RB"],
+    style: "retooling",
+    assets: [
+      {
+        id: "trade-p-17",
+        name: "Drake London",
+        position: "WR",
+        nflTeam: "ATL",
+        rosterSlot: "WR",
+        projectedPoints: 14.6,
+        tradeValue: 76,
+        age: 25,
+        risk: 31,
+        trend: "rising",
+        keeperGrade: 86,
+        note: "Ascending receiver with target dominance."
+      },
+      {
+        id: "trade-p-18",
+        name: "Kyren Williams",
+        position: "RB",
+        nflTeam: "LAR",
+        rosterSlot: "RB",
+        projectedPoints: 15.9,
+        tradeValue: 70,
+        age: 26,
+        risk: 42,
+        trend: "steady",
+        keeperGrade: 68,
+        note: "Touch volume is excellent, durability risk remains."
+      },
+      {
+        id: "trade-p-19",
+        name: "Marvin Harrison Jr.",
+        position: "WR",
+        nflTeam: "ARI",
+        rosterSlot: "WR",
+        projectedPoints: 14.2,
+        tradeValue: 88,
+        age: 24,
+        risk: 28,
+        trend: "rising",
+        keeperGrade: 97,
+        note: "Premium long-term bet."
+      },
+      {
+        id: "trade-p-20",
+        name: "2026 Round 1 Pick",
+        position: "PICK",
+        nflTeam: "Draft",
+        rosterSlot: "Future",
+        projectedPoints: 0,
+        tradeValue: 61,
+        age: null,
+        risk: 18,
+        trend: "steady",
+        keeperGrade: 94,
+        note: "High-leverage rebuilding asset."
+      }
+    ]
+  }
+];
