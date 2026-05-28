@@ -8,9 +8,11 @@ import {
   Gauge,
   Home,
   Lock,
+  MapPinned,
   Settings,
   Shield,
   SlidersHorizontal,
+  Search,
   Trophy,
   Users,
   Zap
@@ -26,14 +28,17 @@ import {
   type ScoringRules
 } from "@baal/fantasy-engine";
 import { baalLegacyCapabilities } from "@baal/football-data";
+import { StadiumMap } from "../components/StadiumMap";
 import { leagueTeams, recentActivity, waiverTargets } from "../lib/sample-data";
+import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
 
-type ViewKey = "dashboard" | "scoring" | "rosters" | "settings";
+type ViewKey = "dashboard" | "scoring" | "rosters" | "map" | "settings";
 
 const views: Array<{ key: ViewKey; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { key: "dashboard", label: "Dashboard", icon: Home },
   { key: "scoring", label: "Scoring", icon: Gauge },
   { key: "rosters", label: "Rosters", icon: Users },
+  { key: "map", label: "Map", icon: MapPinned },
   { key: "settings", label: "Settings", icon: Settings }
 ];
 
@@ -62,11 +67,14 @@ export default function HomePage() {
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [rules, setRules] = useState<ScoringRules>(defaultScoringRules);
   const [selectedTeamId, setSelectedTeamId] = useState(leagueTeams[0].id);
+  const [selectedStadiumId, setSelectedStadiumId] = useState(stadiumMapEntries[0].id);
   const [pprEnabled, setPprEnabled] = useState(true);
   const [waiverLock, setWaiverLock] = useState(true);
   const [tradeReview, setTradeReview] = useState(false);
 
   const selectedTeam = leagueTeams.find((team) => team.id === selectedTeamId) ?? leagueTeams[0];
+  const selectedStadium =
+    stadiumMapEntries.find((stadium) => stadium.id === selectedStadiumId) ?? stadiumMapEntries[0];
   const matchup = useMemo(() => buildMatchup(leagueTeams[0], leagueTeams[1], rules), [rules]);
   const selectedScore = useMemo(() => scoreTeam(selectedTeam, rules), [rules, selectedTeam]);
 
@@ -156,6 +164,9 @@ export default function HomePage() {
             setSelectedTeamId={setSelectedTeamId}
           />
         )}
+        {activeView === "map" && (
+          <MapView selectedStadium={selectedStadium} setSelectedStadiumId={setSelectedStadiumId} />
+        )}
         {activeView === "settings" && (
           <SettingsView
             pprEnabled={pprEnabled}
@@ -170,6 +181,129 @@ export default function HomePage() {
         )}
       </section>
     </main>
+  );
+}
+
+function MapView({
+  selectedStadium,
+  setSelectedStadiumId
+}: {
+  selectedStadium: StadiumMapEntry;
+  setSelectedStadiumId: (stadiumId: string) => void;
+}) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [conferenceFilter, setConferenceFilter] = useState("all");
+
+  const conferences = useMemo(
+    () =>
+      Array.from(new Set(stadiumMapEntries.map((stadium) => stadium.conference).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    []
+  );
+
+  const filteredStadiums = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    return stadiumMapEntries.filter((stadium) => {
+      const matchesConference = conferenceFilter === "all" || stadium.conference === conferenceFilter;
+      const matchesSearch =
+        !normalizedSearch ||
+        [stadium.team, stadium.stadium, stadium.city, stadium.state, stadium.conference, stadium.mascot]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch);
+
+      return matchesConference && matchesSearch;
+    });
+  }, [conferenceFilter, searchTerm]);
+
+  const resultList = filteredStadiums.slice(0, 14);
+
+  return (
+    <div className="view-grid map-grid">
+      <section className="section-panel map-control-panel">
+        <PanelTitle icon={MapPinned} title="Stadium Finder" />
+        <label className="search-field">
+          <Search size={17} />
+          <input
+            aria-label="Search stadiums"
+            placeholder="Search team, city, stadium"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+          />
+        </label>
+        <select
+          aria-label="Filter by conference"
+          className="conference-select"
+          value={conferenceFilter}
+          onChange={(event) => setConferenceFilter(event.target.value)}
+        >
+          <option value="all">All conferences</option>
+          {conferences.map((conference) => (
+            <option key={conference} value={conference}>
+              {conference}
+            </option>
+          ))}
+        </select>
+
+        <div className="stadium-result-list">
+          {resultList.map((stadium) => (
+            <button
+              className={stadium.id === selectedStadium.id ? "stadium-result selected" : "stadium-result"}
+              key={stadium.id}
+              onClick={() => setSelectedStadiumId(stadium.id)}
+              type="button"
+            >
+              <TeamLogo stadium={stadium} />
+              <span>
+                <strong>{stadium.team}</strong>
+                <small>{stadium.stadium}</small>
+              </span>
+              <b>{stadium.abbreviation || stadium.state}</b>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-panel stadium-map-panel">
+        <div className="stadium-map-header">
+          <div className="stadium-title-lockup">
+            <TeamLogo stadium={selectedStadium} />
+            <div>
+              <p className="eyebrow">{selectedStadium.conference || "College Football"}</p>
+              <h3>{selectedStadium.team}</h3>
+              <span>
+                {selectedStadium.stadium} | {selectedStadium.city}, {selectedStadium.state}
+              </span>
+            </div>
+          </div>
+          <div className="stadium-map-metrics">
+            <Metric label="Capacity" value={formatCapacity(selectedStadium.capacity)} />
+            <Metric label="Built" value={selectedStadium.built?.toString() ?? "N/A"} />
+          </div>
+        </div>
+        <div className="stadium-map-shell">
+          <StadiumMap
+            stadiums={stadiumMapEntries}
+            selectedStadium={selectedStadium}
+            onSelectStadium={setSelectedStadiumId}
+          />
+        </div>
+      </section>
+
+      <section className="section-panel stadium-detail-panel">
+        <PanelTitle icon={MapPinned} title="BAAL Stadium Data" />
+        <div className="stadium-detail-grid">
+          <Metric label="Mascot" value={selectedStadium.mascot || "N/A"} />
+          <Metric label="Division" value={selectedStadium.division.toUpperCase()} />
+          <Metric label="Expanded" value={selectedStadium.expanded?.toString() ?? "N/A"} />
+          <Metric
+            label="Coordinates"
+            value={`${selectedStadium.latitude.toFixed(3)}, ${selectedStadium.longitude.toFixed(3)}`}
+          />
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -459,6 +593,14 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function TeamLogo({ stadium }: { stadium: StadiumMapEntry }) {
+  if (stadium.logoUrl) {
+    return <img className="team-logo" src={stadium.logoUrl} alt="" />;
+  }
+
+  return <span className="team-logo fallback">{stadium.abbreviation || stadium.team.slice(0, 2)}</span>;
+}
+
 function ToggleRow({
   checked,
   label,
@@ -482,9 +624,15 @@ function viewTitle(view: ViewKey): string {
       return "Fantasy Scoring";
     case "rosters":
       return "Roster Room";
+    case "map":
+      return "Team Map";
     case "settings":
       return "League Settings";
     default:
       return "League Dashboard";
   }
+}
+
+function formatCapacity(capacity: number | null): string {
+  return capacity?.toLocaleString() ?? "N/A";
 }

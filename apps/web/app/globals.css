@@ -31,7 +31,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -434,6 +435,186 @@ th {
   grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
 }
 
+.map-grid {
+  align-items: start;
+  grid-template-columns: minmax(270px, 0.58fr) minmax(0, 1.42fr);
+}
+
+.map-control-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.search-field {
+  align-items: center;
+  background: #f8faf9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.search-field input {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  min-width: 0;
+  outline: 0;
+  width: 100%;
+}
+
+.conference-select {
+  appearance: none;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.stadium-result-list {
+  display: grid;
+  gap: 8px;
+  max-height: 510px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.stadium-result {
+  align-items: center;
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  min-height: 62px;
+  padding: 8px;
+  text-align: left;
+}
+
+.stadium-result.selected {
+  border-color: var(--gold);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gold) 48%, transparent);
+}
+
+.stadium-result span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stadium-result small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stadium-result b {
+  color: var(--blue);
+  font-size: 12px;
+}
+
+.team-logo {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  height: 40px;
+  object-fit: contain;
+  padding: 4px;
+  width: 40px;
+}
+
+.team-logo.fallback {
+  align-items: center;
+  color: var(--blue);
+  display: grid;
+  font-size: 12px;
+  font-weight: 900;
+  justify-items: center;
+}
+
+.stadium-map-panel {
+  min-height: 650px;
+}
+
+.stadium-map-header {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.stadium-title-lockup {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.stadium-title-lockup .team-logo {
+  height: 58px;
+  width: 58px;
+}
+
+.stadium-title-lockup h3 {
+  font-size: clamp(24px, 3vw, 34px);
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.stadium-title-lockup span {
+  color: var(--muted);
+  display: block;
+  margin-top: 4px;
+}
+
+.stadium-map-metrics {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+}
+
+.stadium-map-shell {
+  background: #dfe8e3;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  height: 520px;
+  min-height: 520px;
+  overflow: hidden;
+}
+
+.stadium-map-canvas {
+  height: 100%;
+  min-height: 520px;
+  width: 100%;
+}
+
+.leaflet-container {
+  font: inherit;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  box-shadow: 0 12px 32px rgba(21, 34, 53, 0.22);
+}
+
+.stadium-detail-panel {
+  grid-column: 2;
+}
+
+.stadium-detail-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .segmented-control {
   background: #edf1ef;
   border-radius: 8px;
@@ -552,7 +733,7 @@ th {
   }
 
   .nav-list {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .nav-item {
@@ -565,9 +746,18 @@ th {
 
   .dashboard-grid,
   .matchup-board,
+  .map-grid,
   .roster-grid,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stadium-detail-panel {
+    grid-column: auto;
+  }
+
+  .stadium-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .hero-band {
@@ -607,5 +797,20 @@ th {
 
   .score-divider {
     display: none;
+  }
+
+  .stadium-map-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stadium-map-metrics {
+    width: 100%;
+  }
+
+  .stadium-map-shell,
+  .stadium-map-canvas {
+    height: 430px;
+    min-height: 430px;
   }
 }
