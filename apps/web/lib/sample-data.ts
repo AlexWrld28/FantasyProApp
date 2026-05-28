@@ -240,3 +240,147 @@ export const waiverTargets = [
   { name: "Jalen McMillan", position: "WR", team: "TB", priority: "2nd" },
   { name: "Ben Sinnott", position: "TE", team: "WAS", priority: "Watch" }
 ];
+
+export type ChatMessage = {
+  id: string;
+  author: string;
+  team: string;
+  initials: string;
+  body: string;
+  sentAt: string;
+  isSelf?: boolean;
+  tag?: "commissioner" | "trade" | "waiver";
+};
+
+export type Presence = "online" | "away" | "offline";
+
+export type DirectThread = {
+  id: string;
+  manager: string;
+  team: string;
+  initials: string;
+  presence: Presence;
+  unreadCount: number;
+  lastMessage: string;
+  messages: ChatMessage[];
+};
+
+export const leagueMembers: Array<{
+  manager: string;
+  team: string;
+  initials: string;
+  presence: Presence;
+}> = [
+  { manager: "Aazma", team: "Fourth Down Syndicate", initials: "AZ", presence: "online" },
+  { manager: "Maya", team: "Red Zone Accountants", initials: "MY", presence: "online" },
+  { manager: "Jordan", team: "Two Minute Drill", initials: "JD", presence: "away" },
+  { manager: "Sam", team: "Waiver Wire Royalty", initials: "SM", presence: "offline" }
+];
+
+export const leagueChatMessages: ChatMessage[] = [
+  {
+    id: "league-1",
+    author: "Maya",
+    team: "Red Zone Accountants",
+    initials: "MY",
+    body: "Trade deadline is going to be chaos. I have WR depth if anyone needs one.",
+    sentAt: "9:12 AM",
+    tag: "trade"
+  },
+  {
+    id: "league-2",
+    author: "Jordan",
+    team: "Two Minute Drill",
+    initials: "JD",
+    body: "Commissioner, can we confirm whether waivers run Wednesday morning or after MNF stat corrections?",
+    sentAt: "9:16 AM",
+    tag: "waiver"
+  },
+  {
+    id: "league-3",
+    author: "Aazma",
+    team: "Fourth Down Syndicate",
+    initials: "AZ",
+    body: "Wednesday morning. Stat corrections will still update scores, but waivers stay on schedule.",
+    sentAt: "9:18 AM",
+    isSelf: true,
+    tag: "commissioner"
+  },
+  {
+    id: "league-4",
+    author: "Sam",
+    team: "Waiver Wire Royalty",
+    initials: "SM",
+    body: "Perfect. Also accepting all desperate RB offers until further notice.",
+    sentAt: "9:24 AM"
+  }
+];
+
+export const directThreads: DirectThread[] = [
+  {
+    id: "dm-maya",
+    manager: "Maya",
+    team: "Red Zone Accountants",
+    initials: "MY",
+    presence: "online",
+    unreadCount: 2,
+    lastMessage: "I would move Gibbs, but only if the package is spicy.",
+    messages: [
+      {
+        id: "dm-maya-1",
+        author: "Maya",
+        team: "Red Zone Accountants",
+        initials: "MY",
+        body: "I would move Gibbs, but only if the package is spicy.",
+        sentAt: "8:44 AM"
+      },
+      {
+        id: "dm-maya-2",
+        author: "Aazma",
+        team: "Fourth Down Syndicate",
+        initials: "AZ",
+        body: "I can start with Bijan plus a bench WR, but I need a starter coming back.",
+        sentAt: "8:49 AM",
+        isSelf: true
+      }
+    ]
+  },
+  {
+    id: "dm-jordan",
+    manager: "Jordan",
+    team: "Two Minute Drill",
+    initials: "JD",
+    presence: "away",
+    unreadCount: 0,
+    lastMessage: "Good luck this week. Our matchup is way too close.",
+    messages: [
+      {
+        id: "dm-jordan-1",
+        author: "Jordan",
+        team: "Two Minute Drill",
+        initials: "JD",
+        body: "Good luck this week. Our matchup is way too close.",
+        sentAt: "Yesterday"
+      }
+    ]
+  },
+  {
+    id: "dm-sam",
+    manager: "Sam",
+    team: "Waiver Wire Royalty",
+    initials: "SM",
+    presence: "offline",
+    unreadCount: 0,
+    lastMessage: "Send me your RB offers before waivers.",
+    messages: [
+      {
+        id: "dm-sam-1",
+        author: "Sam",
+        team: "Waiver Wire Royalty",
+        initials: "SM",
+        body: "Send me your RB offers before waivers.",
+        sentAt: "Mon"
+      }
+    ]
+  }
+];

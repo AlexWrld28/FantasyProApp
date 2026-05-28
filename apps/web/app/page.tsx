@@ -2,17 +2,21 @@
 
 import {
   Activity,
+  AtSign,
   CalendarClock,
   Check,
   ClipboardList,
   Gauge,
+  Hash,
   Home,
   Lock,
   MapPinned,
+  MessageCircle,
   Settings,
   Shield,
   SlidersHorizontal,
   Search,
+  Send,
   Trophy,
   Users,
   Zap
@@ -29,15 +33,27 @@ import {
 } from "@baal/fantasy-engine";
 import { baalLegacyCapabilities } from "@baal/football-data";
 import { StadiumMap } from "../components/StadiumMap";
-import { leagueTeams, recentActivity, waiverTargets } from "../lib/sample-data";
+import {
+  directThreads as initialDirectThreads,
+  leagueChatMessages as initialLeagueChatMessages,
+  leagueMembers,
+  leagueTeams,
+  recentActivity,
+  waiverTargets,
+  type ChatMessage,
+  type DirectThread,
+  type Presence
+} from "../lib/sample-data";
 import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
 
-type ViewKey = "dashboard" | "scoring" | "rosters" | "map" | "settings";
+type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "map" | "settings";
+type ChatMode = "league" | "dm";
 
 const views: Array<{ key: ViewKey; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { key: "dashboard", label: "Dashboard", icon: Home },
   { key: "scoring", label: "Scoring", icon: Gauge },
   { key: "rosters", label: "Rosters", icon: Users },
+  { key: "chat", label: "Chat", icon: MessageCircle },
   { key: "map", label: "Map", icon: MapPinned },
   { key: "settings", label: "Settings", icon: Settings }
 ];
@@ -164,6 +180,7 @@ export default function HomePage() {
             setSelectedTeamId={setSelectedTeamId}
           />
         )}
+        {activeView === "chat" && <ChatView />}
         {activeView === "map" && (
           <MapView selectedStadium={selectedStadium} setSelectedStadiumId={setSelectedStadiumId} />
         )}
@@ -181,6 +198,164 @@ export default function HomePage() {
         )}
       </section>
     </main>
+  );
+}
+
+function ChatView() {
+  const [chatMode, setChatMode] = useState<ChatMode>("league");
+  const [leagueMessages, setLeagueMessages] = useState<ChatMessage[]>(initialLeagueChatMessages);
+  const [dmThreads, setDmThreads] = useState<DirectThread[]>(initialDirectThreads);
+  const [selectedThreadId, setSelectedThreadId] = useState(initialDirectThreads[0].id);
+  const [draft, setDraft] = useState("");
+
+  const selectedThread = dmThreads.find((thread) => thread.id === selectedThreadId) ?? dmThreads[0];
+  const activeMessages = chatMode === "league" ? leagueMessages : selectedThread.messages;
+  const activeTitle = chatMode === "league" ? "League Lobby" : selectedThread.manager;
+  const activeSubtitle =
+    chatMode === "league"
+      ? "League-wide trash talk, rulings, trades, and waiver chatter"
+      : `${selectedThread.team} | ${selectedThread.presence}`;
+
+  function sendMessage() {
+    const body = draft.trim();
+    if (!body) {
+      return;
+    }
+
+    const message: ChatMessage = {
+      id: `local-${Date.now()}`,
+      author: "Aazma",
+      team: "Fourth Down Syndicate",
+      initials: "AZ",
+      body,
+      sentAt: "Now",
+      isSelf: true
+    };
+
+    if (chatMode === "league") {
+      setLeagueMessages((messages) => [...messages, message]);
+    } else {
+      setDmThreads((threads) =>
+        threads.map((thread) =>
+          thread.id === selectedThread.id
+            ? {
+                ...thread,
+                lastMessage: body,
+                unreadCount: 0,
+                messages: [...thread.messages, message]
+              }
+            : thread
+        )
+      );
+    }
+
+    setDraft("");
+  }
+
+  return (
+    <div className="view-grid chat-grid">
+      <section className="section-panel chat-sidebar-panel">
+        <PanelTitle icon={MessageCircle} title="League Comms" />
+        <div className="chat-mode-switch">
+          <button
+            className={chatMode === "league" ? "selected" : ""}
+            onClick={() => setChatMode("league")}
+            type="button"
+          >
+            <Hash size={16} />
+            League
+          </button>
+          <button className={chatMode === "dm" ? "selected" : ""} onClick={() => setChatMode("dm")} type="button">
+            <AtSign size={16} />
+            DMs
+          </button>
+        </div>
+
+        <button
+          className={chatMode === "league" ? "chat-channel active" : "chat-channel"}
+          onClick={() => setChatMode("league")}
+          type="button"
+        >
+          <span className="chat-channel-icon">
+            <Hash size={17} />
+          </span>
+          <span>
+            <strong>League Lobby</strong>
+            <small>{leagueMessages.length} messages</small>
+          </span>
+        </button>
+
+        <div className="dm-thread-list">
+          {dmThreads.map((thread) => (
+            <button
+              className={chatMode === "dm" && selectedThread.id === thread.id ? "dm-thread active" : "dm-thread"}
+              key={thread.id}
+              onClick={() => {
+                setChatMode("dm");
+                setSelectedThreadId(thread.id);
+              }}
+              type="button"
+            >
+              <Avatar initials={thread.initials} presence={thread.presence} />
+              <span>
+                <strong>{thread.manager}</strong>
+                <small>{thread.lastMessage}</small>
+              </span>
+              {thread.unreadCount > 0 && <b>{thread.unreadCount}</b>}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="section-panel chat-window-panel">
+        <div className="chat-window-header">
+          <div>
+            <p className="eyebrow">{chatMode === "league" ? "Public Channel" : "Direct Message"}</p>
+            <h3>{activeTitle}</h3>
+            <span>{activeSubtitle}</span>
+          </div>
+        </div>
+
+        <div className="message-list" aria-label={`${activeTitle} messages`}>
+          {activeMessages.map((message) => (
+            <MessageBubble key={message.id} message={message} />
+          ))}
+        </div>
+
+        <form
+          className="message-composer"
+          onSubmit={(event) => {
+            event.preventDefault();
+            sendMessage();
+          }}
+        >
+          <input
+            aria-label="Write a message"
+            placeholder={chatMode === "league" ? "Message the league" : `Message ${selectedThread.manager}`}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <button type="submit" aria-label="Send message">
+            <Send size={18} />
+          </button>
+        </form>
+      </section>
+
+      <section className="section-panel member-panel">
+        <PanelTitle icon={Users} title="Managers" />
+        <div className="member-list">
+          {leagueMembers.map((member) => (
+            <div className="member-row" key={member.manager}>
+              <Avatar initials={member.initials} presence={member.presence} />
+              <div>
+                <strong>{member.manager}</strong>
+                <span>{member.team}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -593,6 +768,38 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function MessageBubble({ message }: { message: ChatMessage }) {
+  return (
+    <article className={message.isSelf ? "chat-message self" : "chat-message"}>
+      <Avatar initials={message.initials} />
+      <div className="message-body">
+        <div className="message-meta">
+          <strong>{message.author}</strong>
+          <span>{message.team}</span>
+          <small>{message.sentAt}</small>
+          {message.tag && <b>{message.tag}</b>}
+        </div>
+        <p>{message.body}</p>
+      </div>
+    </article>
+  );
+}
+
+function Avatar({
+  initials,
+  presence
+}: {
+  initials: string;
+  presence?: Presence;
+}) {
+  return (
+    <span className="avatar">
+      {initials}
+      {presence && <i className={`presence-dot ${presence}`} />}
+    </span>
+  );
+}
+
 function TeamLogo({ stadium }: { stadium: StadiumMapEntry }) {
   if (stadium.logoUrl) {
     return <img className="team-logo" src={stadium.logoUrl} alt="" />;
@@ -624,6 +831,8 @@ function viewTitle(view: ViewKey): string {
       return "Fantasy Scoring";
     case "rosters":
       return "Roster Room";
+    case "chat":
+      return "League Chat";
     case "map":
       return "Team Map";
     case "settings":
