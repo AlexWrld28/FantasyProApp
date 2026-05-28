@@ -33,6 +33,7 @@ export type PlayerStatLine = {
 export type FantasyPlayer = {
   id: string;
   name: string;
+  imageUrl?: string;
   team: string;
   opponent: string;
   position: PlayerPosition;

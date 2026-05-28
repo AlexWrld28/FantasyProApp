@@ -581,7 +581,12 @@ function TradeAssetColumn({
               onClick={() => toggleAsset(asset.id)}
               type="button"
             >
-              <span className={`asset-position ${asset.position.toLowerCase()}`}>{asset.position}</span>
+              <PlayerImage
+                className="asset-headshot"
+                fallback={asset.position}
+                imageUrl={asset.imageUrl}
+                name={asset.name}
+              />
               <span className="asset-main">
                 <strong>{asset.name}</strong>
                 <small>
@@ -832,7 +837,17 @@ function ScoringView({ matchup }: { matchup: ReturnType<typeof buildMatchup> }) 
               {[...matchup.home.starters, ...matchup.away.starters].map((score) => (
                 <tr key={score.player.id}>
                   <td>{score.player.rosterSlot}</td>
-                  <td>{score.player.name}</td>
+                  <td>
+                    <span className="roster-player-cell">
+                      <PlayerImage
+                        className="roster-headshot"
+                        fallback={score.player.position}
+                        imageUrl={score.player.imageUrl}
+                        name={score.player.name}
+                      />
+                      <span>{score.player.name}</span>
+                    </span>
+                  </td>
                   <td>{score.player.team}</td>
                   <td>{formatPoints(score.projectedPoints)}</td>
                   <td className="points-cell">{formatPoints(score.actualPoints)}</td>
@@ -956,10 +971,17 @@ function TeamScoreColumn({ score }: { score: ReturnType<typeof scoreTeam> }) {
       <div className="starter-list">
         {score.starters.map((playerScore) => (
           <div className="starter-row" key={playerScore.player.id}>
-            <span>{playerScore.player.rosterSlot}</span>
+            <PlayerImage
+              className="starter-headshot"
+              fallback={playerScore.player.rosterSlot}
+              imageUrl={playerScore.player.imageUrl}
+              name={playerScore.player.name}
+            />
             <div>
               <strong>{playerScore.player.name}</strong>
-              <small>{playerScore.player.team} vs {playerScore.player.opponent}</small>
+              <small>
+                {playerScore.player.rosterSlot} | {playerScore.player.team} vs {playerScore.player.opponent}
+              </small>
             </div>
             <b>{formatPoints(playerScore.actualPoints)}</b>
           </div>
@@ -987,7 +1009,17 @@ function RosterTable({ players }: { players: FantasyPlayer[] }) {
           {players.map((player) => (
             <tr key={player.id}>
               <td>{player.rosterSlot}</td>
-              <td>{player.name}</td>
+              <td>
+                <span className="roster-player-cell">
+                  <PlayerImage
+                    className="roster-headshot"
+                    fallback={player.position}
+                    imageUrl={player.imageUrl}
+                    name={player.name}
+                  />
+                  <span>{player.name}</span>
+                </span>
+              </td>
               <td>{player.position}</td>
               <td>{player.team}</td>
               <td>
@@ -1057,6 +1089,24 @@ function Avatar({
     <span className="avatar">
       {initials}
       {presence && <i className={`presence-dot ${presence}`} />}
+    </span>
+  );
+}
+
+function PlayerImage({
+  className = "",
+  fallback,
+  imageUrl,
+  name
+}: {
+  className?: string;
+  fallback: string;
+  imageUrl?: string;
+  name: string;
+}) {
+  return (
+    <span className={`player-image ${className}`}>
+      {imageUrl ? <img src={imageUrl} alt={name} loading="lazy" /> : <span>{fallback}</span>}
     </span>
   );
 }

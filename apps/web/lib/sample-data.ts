@@ -12,6 +12,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-1",
         name: "Caleb Williams",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4431611.png",
         team: "CHI",
         opponent: "MIN",
         position: "QB",
@@ -23,6 +24,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-2",
         name: "Bijan Robinson",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4430807.png",
         team: "ATL",
         opponent: "NO",
         position: "RB",
@@ -34,6 +36,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-3",
         name: "Puka Nacua",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4426515.png",
         team: "LAR",
         opponent: "ARI",
         position: "WR",
@@ -45,6 +48,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-4",
         name: "Sam LaPorta",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4430027.png",
         team: "DET",
         opponent: "GB",
         position: "TE",
@@ -56,6 +60,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-5",
         name: "Deebo Samuel",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/3126486.png",
         team: "SF",
         opponent: "SEA",
         position: "WR",
@@ -67,6 +72,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-6",
         name: "Jake Moody",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4372066.png",
         team: "SF",
         opponent: "SEA",
         position: "K",
@@ -89,6 +95,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-8",
         name: "Rome Odunze",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4431299.png",
         team: "CHI",
         opponent: "MIN",
         position: "WR",
@@ -110,6 +117,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-9",
         name: "Jayden Daniels",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4426348.png",
         team: "WAS",
         opponent: "DAL",
         position: "QB",
@@ -121,6 +129,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-10",
         name: "Jahmyr Gibbs",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4429795.png",
         team: "DET",
         opponent: "GB",
         position: "RB",
@@ -132,6 +141,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-11",
         name: "Garrett Wilson",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4569618.png",
         team: "NYJ",
         opponent: "MIA",
         position: "WR",
@@ -143,6 +153,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-12",
         name: "Trey McBride",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4361307.png",
         team: "ARI",
         opponent: "LAR",
         position: "TE",
@@ -154,6 +165,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-13",
         name: "Breece Hall",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4427366.png",
         team: "NYJ",
         opponent: "MIA",
         position: "RB",
@@ -165,6 +177,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-14",
         name: "Brandon Aubrey",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/3953687.png",
         team: "DAL",
         opponent: "WAS",
         position: "K",
@@ -187,6 +200,7 @@ export const leagueTeams: FantasyTeam[] = [
       {
         id: "p-16",
         name: "Keon Coleman",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4635008.png",
         team: "BUF",
         opponent: "NE",
         position: "WR",
@@ -388,6 +402,7 @@ export const directThreads: DirectThread[] = [
 export type TradeAsset = {
   id: string;
   name: string;
+  imageUrl?: string;
   position: "QB" | "RB" | "WR" | "TE" | "K" | "DST" | "PICK" | "FAAB";
   nflTeam: string;
   rosterSlot: string;
@@ -422,6 +437,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-1",
         name: "Caleb Williams",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4431611.png",
         position: "QB",
         nflTeam: "CHI",
         rosterSlot: "QB",
@@ -436,6 +452,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-2",
         name: "Bijan Robinson",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4430807.png",
         position: "RB",
         nflTeam: "ATL",
         rosterSlot: "RB",
@@ -450,6 +467,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-3",
         name: "Puka Nacua",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4426515.png",
         position: "WR",
         nflTeam: "LAR",
         rosterSlot: "WR",
@@ -464,6 +482,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-4",
         name: "Deebo Samuel",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/3126486.png",
         position: "WR",
         nflTeam: "SF",
         rosterSlot: "FLEX",
@@ -516,6 +535,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-7",
         name: "Jayden Daniels",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4426348.png",
         position: "QB",
         nflTeam: "WAS",
         rosterSlot: "QB",
@@ -530,6 +550,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-8",
         name: "Jahmyr Gibbs",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4429795.png",
         position: "RB",
         nflTeam: "DET",
         rosterSlot: "RB",
@@ -544,6 +565,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-9",
         name: "Garrett Wilson",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4569618.png",
         position: "WR",
         nflTeam: "NYJ",
         rosterSlot: "WR",
@@ -558,6 +580,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-10",
         name: "Trey McBride",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4361307.png",
         position: "TE",
         nflTeam: "ARI",
         rosterSlot: "TE",
@@ -610,6 +633,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-13",
         name: "Amon-Ra St. Brown",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4374302.png",
         position: "WR",
         nflTeam: "DET",
         rosterSlot: "WR",
@@ -624,6 +648,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-14",
         name: "Jonathan Taylor",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4242335.png",
         position: "RB",
         nflTeam: "IND",
         rosterSlot: "RB",
@@ -638,6 +663,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-15",
         name: "Brock Bowers",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4432665.png",
         position: "TE",
         nflTeam: "LV",
         rosterSlot: "TE",
@@ -676,6 +702,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-17",
         name: "Drake London",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4426502.png",
         position: "WR",
         nflTeam: "ATL",
         rosterSlot: "WR",
@@ -690,6 +717,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-18",
         name: "Kyren Williams",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4430737.png",
         position: "RB",
         nflTeam: "LAR",
         rosterSlot: "RB",
@@ -704,6 +732,7 @@ export const tradeTeams: TradeTeam[] = [
       {
         id: "trade-p-19",
         name: "Marvin Harrison Jr.",
+        imageUrl: "https://a.espncdn.com/i/headshots/nfl/players/full/4432708.png",
         position: "WR",
         nflTeam: "ARI",
         rosterSlot: "WR",

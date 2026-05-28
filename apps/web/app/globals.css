@@ -382,16 +382,6 @@ button {
   min-height: 58px;
 }
 
-.starter-row > span {
-  background: #eef3f7;
-  border-radius: 6px;
-  color: var(--blue);
-  font-weight: 900;
-  padding: 5px 7px;
-  width: 44px;
-  text-align: center;
-}
-
 .starter-row div {
   display: grid;
   flex: 1;
@@ -428,6 +418,47 @@ th {
 .points-cell {
   color: var(--green);
   font-weight: 900;
+}
+
+.player-image {
+  align-items: center;
+  background: #eef3f7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--blue);
+  display: grid;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 900;
+  height: 44px;
+  justify-items: center;
+  overflow: hidden;
+  width: 44px;
+}
+
+.player-image img {
+  background: #f8faf9;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  width: 100%;
+}
+
+.starter-headshot {
+  height: 46px;
+  width: 46px;
+}
+
+.roster-player-cell {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.roster-headshot {
+  height: 38px;
+  width: 38px;
 }
 
 .roster-grid,
@@ -832,30 +863,15 @@ th {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gold) 48%, transparent);
 }
 
-.asset-position {
-  align-items: center;
-  background: #eef3f7;
-  border-radius: 8px;
-  color: var(--blue);
-  display: grid;
-  font-size: 12px;
-  font-weight: 900;
-  height: 42px;
-  justify-items: center;
-  width: 48px;
+.asset-headshot {
+  background: #f8faf9;
+  height: 52px;
+  width: 52px;
 }
 
-.asset-position.rb,
-.asset-position.wr,
-.asset-position.te {
-  background: #e5f4eb;
-  color: var(--green);
-}
-
-.asset-position.pick,
-.asset-position.faab {
-  background: #f8eddc;
-  color: #946213;
+.asset-headshot > span {
+  padding: 0 5px;
+  text-align: center;
 }
 
 .asset-main,
