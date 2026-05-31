@@ -73,6 +73,42 @@ type Profile = {
 
 type AuthMode = "sign-in" | "sign-up";
 
+type AdminLeague = {
+  name: string;
+  season_year: number;
+};
+
+type AdminMembership = {
+  joined_at: string;
+  leagues: AdminLeague | null;
+  role: string;
+  user_id: string;
+};
+
+type AdminTeam = {
+  faab_remaining: number;
+  leagues: AdminLeague | null;
+  manager_id: string;
+  name: string;
+  record_losses: number;
+  record_wins: number;
+};
+
+type AdminUser = {
+  appMetadata: Record<string, unknown>;
+  confirmedAt?: string;
+  createdAt: string;
+  email?: string;
+  id: string;
+  lastSignInAt?: string;
+  memberships: AdminMembership[];
+  phone?: string;
+  profile: Profile | null;
+  teams: AdminTeam[];
+  updatedAt?: string;
+  userMetadata: Record<string, unknown>;
+};
+
 const views: Array<{ key: ViewKey; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { key: "dashboard", label: "Dashboard", icon: Home },
   { key: "scoring", label: "Scoring", icon: Gauge },
@@ -1311,6 +1347,8 @@ function SettingsView({
         </button>
       </section>
 
+      <AdminPanel supabase={supabase} />
+
       <section className="section-panel scoring-settings">
         <PanelTitle icon={SlidersHorizontal} title="Scoring Rules" />
         <div className="settings-list">
@@ -1344,6 +1382,177 @@ function SettingsView({
         </div>
       </section>
     </div>
+  );
+}
+
+function AdminPanel({ supabase }: { supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>> }) {
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [passwordsByUser, setPasswordsByUser] = useState<Record<string, string>>({});
+  const [loadingAdmin, setLoadingAdmin] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const [adminStatus, setAdminStatus] = useState("");
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadAdminUsers() {
+      const token = await getAccessToken(supabase);
+      if (!token) {
+        if (isMounted) {
+          setLoadingAdmin(false);
+        }
+        return;
+      }
+
+      const response = await fetch("/api/admin/users", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!isMounted) {
+        return;
+      }
+
+      setLoadingAdmin(false);
+
+      if (response.status === 403) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const payload = (await response.json()) as { error?: string; users?: AdminUser[] };
+
+      if (!response.ok) {
+        setAdminError(payload.error ?? "Unable to load admin users.");
+        return;
+      }
+
+      setIsAdmin(true);
+      setAdminUsers(payload.users ?? []);
+    }
+
+    void loadAdminUsers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase]);
+
+  async function updateManagedPassword(userId: string) {
+    const password = passwordsByUser[userId] ?? "";
+    if (password.length < 6) {
+      setAdminError("Password must be at least 6 characters.");
+      return;
+    }
+
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setAdminError("Your session expired. Sign in again.");
+      return;
+    }
+
+    setSavingUserId(userId);
+    setAdminError("");
+    setAdminStatus("");
+
+    const response = await fetch(`/api/admin/users/${userId}/password`, {
+      body: JSON.stringify({ password }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "PATCH"
+    });
+    const payload = (await response.json()) as { error?: string };
+
+    setSavingUserId(null);
+
+    if (!response.ok) {
+      setAdminError(payload.error ?? "Unable to update password.");
+      return;
+    }
+
+    setPasswordsByUser((current) => ({ ...current, [userId]: "" }));
+    setAdminStatus("Password updated.");
+  }
+
+  if (loadingAdmin) {
+    return null;
+  }
+
+  if (!isAdmin) {
+    return null;
+  }
+
+  return (
+    <section className="section-panel admin-panel">
+      <PanelTitle icon={Shield} title="Admin Roster" />
+      <div className="admin-panel-header">
+        <div>
+          <strong>{adminUsers.length} accounts</strong>
+          <span>Supabase Auth users, profiles, league memberships, and managed teams.</span>
+        </div>
+      </div>
+
+      {adminError && <p className="form-message error">{adminError}</p>}
+      {adminStatus && <p className="form-message success">{adminStatus}</p>}
+
+      <div className="admin-user-list">
+        {adminUsers.map((managedUser) => (
+          <article className="admin-user-card" key={managedUser.id}>
+            <div className="admin-user-main">
+              <Avatar initials={adminUserInitials(managedUser)} />
+              <div>
+                <strong>{managedUser.profile?.display_name || managedUser.email || "Unknown user"}</strong>
+                <span>{managedUser.email || managedUser.phone || managedUser.id}</span>
+              </div>
+            </div>
+
+            <div className="admin-data-grid">
+              <Metric label="Created" value={formatAdminDate(managedUser.createdAt)} />
+              <Metric label="Last sign in" value={formatAdminDate(managedUser.lastSignInAt)} />
+              <Metric label="Confirmed" value={managedUser.confirmedAt ? "Yes" : "No"} />
+              <Metric label="Teams" value={managedUser.teams.length.toString()} />
+            </div>
+
+            <div className="admin-detail-list">
+              <AdminDetail label="Leagues" value={formatAdminLeagues(managedUser.memberships)} />
+              <AdminDetail label="Teams" value={formatAdminTeams(managedUser.teams)} />
+              <AdminDetail label="Providers" value={formatProviders(managedUser.appMetadata)} />
+            </div>
+
+            <div className="admin-password-row">
+              <label className="form-field">
+                <span>Set new password</span>
+                <input
+                  autoComplete="new-password"
+                  minLength={6}
+                  type="password"
+                  value={passwordsByUser[managedUser.id] ?? ""}
+                  onChange={(event) =>
+                    setPasswordsByUser((current) => ({
+                      ...current,
+                      [managedUser.id]: event.target.value
+                    }))
+                  }
+                />
+              </label>
+              <button
+                className="primary-action account-action"
+                disabled={savingUserId === managedUser.id}
+                onClick={() => void updateManagedPassword(managedUser.id)}
+                type="button"
+              >
+                {savingUserId === managedUser.id ? "Saving..." : "Update password"}
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1444,6 +1653,15 @@ function ScoreBlock({ label, value }: { label: string; value: number }) {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function AdminDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="admin-detail">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -1675,6 +1893,66 @@ function accountInitials(profile: Profile | null, user: User): string {
     .filter(Boolean);
 
   return (parts[0]?.[0] ?? "M").concat(parts[1]?.[0] ?? "").toUpperCase();
+}
+
+async function getAccessToken(supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+function adminUserInitials(user: AdminUser): string {
+  const source = user.profile?.display_name || user.email || user.phone || "User";
+  const parts = source
+    .replace(/@.*/, "")
+    .split(/\s+|[._-]/)
+    .filter(Boolean);
+
+  return (parts[0]?.[0] ?? "U").concat(parts[1]?.[0] ?? "").toUpperCase();
+}
+
+function formatAdminDate(value?: string): string {
+  if (!value) {
+    return "Never";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(value));
+}
+
+function formatAdminLeagues(memberships: AdminMembership[]): string {
+  if (!memberships.length) {
+    return "No league memberships";
+  }
+
+  return memberships
+    .map((membership) => {
+      const league = membership.leagues;
+      return league ? `${league.name} (${membership.role})` : membership.role;
+    })
+    .join(", ");
+}
+
+function formatAdminTeams(teams: AdminTeam[]): string {
+  if (!teams.length) {
+    return "No managed teams";
+  }
+
+  return teams
+    .map((team) => `${team.name} ${team.record_wins}-${team.record_losses}, $${team.faab_remaining} FAAB`)
+    .join(", ");
+}
+
+function formatProviders(appMetadata: Record<string, unknown>): string {
+  const providers = appMetadata.providers;
+  if (Array.isArray(providers) && providers.every((provider) => typeof provider === "string")) {
+    return providers.join(", ");
+  }
+
+  const provider = appMetadata.provider;
+  return typeof provider === "string" ? provider : "Email";
 }
 
 function signedNumber(value: number): string {

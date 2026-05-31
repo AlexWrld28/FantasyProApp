@@ -657,6 +657,99 @@ th {
   width: fit-content;
 }
 
+.admin-panel {
+  display: grid;
+  gap: 14px;
+  grid-column: 1 / -1;
+}
+
+.admin-panel-header {
+  align-items: center;
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.admin-panel-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-panel-header span,
+.admin-user-main span,
+.admin-detail span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-user-card {
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.admin-user-main {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-user-main div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-user-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-data-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-detail {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+}
+
+.admin-detail strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.admin-password-row {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 360px) auto;
+}
+
 .chat-grid {
   align-items: start;
   grid-template-columns: 300px minmax(0, 1fr) 280px;
@@ -1581,6 +1674,11 @@ th {
 
   .stadium-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-data-grid,
+  .admin-password-row {
+    grid-template-columns: 1fr;
   }
 
   .hero-band {
