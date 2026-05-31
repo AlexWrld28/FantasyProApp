@@ -24,7 +24,8 @@ import {
   Users,
   Zap
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import {
   buildMatchup,
   defaultScoringRules,
@@ -50,6 +51,7 @@ import {
   type TradeAsset,
   type TradeTeam
 } from "../lib/sample-data";
+import { createBrowserSupabaseClient } from "../lib/supabase";
 import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
 
 type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "trade" | "map" | "settings";
@@ -62,6 +64,14 @@ type TradePreferences = {
   keeperWeight: number;
   needWeight: number;
 };
+
+type Profile = {
+  avatar_url: string | null;
+  display_name: string;
+  id: string;
+};
+
+type AuthMode = "sign-in" | "sign-up";
 
 const views: Array<{ key: ViewKey; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { key: "dashboard", label: "Dashboard", icon: Home },
@@ -95,6 +105,10 @@ const scoringInputs: Array<{ key: keyof ScoringRules; label: string; suffix: str
 ];
 
 export default function HomePage() {
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [rules, setRules] = useState<ScoringRules>(defaultScoringRules);
   const [selectedTeamId, setSelectedTeamId] = useState(leagueTeams[0].id);
@@ -111,6 +125,57 @@ export default function HomePage() {
   const matchup = useMemo(() => buildMatchup(leagueTeams[0], leagueTeams[1], rules), [rules]);
   const selectedScore = useMemo(() => scoreTeam(selectedTeam, rules), [rules, selectedTeam]);
 
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) {
+        return;
+      }
+
+      setUser(data.session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!supabase || !user) {
+      setProfile(null);
+      return;
+    }
+
+    let isMounted = true;
+
+    supabase
+      .from("profiles")
+      .select("id, display_name, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (isMounted) {
+          setProfile(data);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase, user]);
+
   function updateRule(key: keyof ScoringRules, rawValue: string) {
     const nextValue = Number(rawValue);
     setRules((current) => ({
@@ -125,6 +190,23 @@ export default function HomePage() {
       ...current,
       reception: nextValue ? 1 : 0
     }));
+  }
+
+  if (authLoading) {
+    return <AuthShell title="Checking session" description="Connecting to Supabase authentication." />;
+  }
+
+  if (!supabase) {
+    return (
+      <AuthShell
+        title="Supabase is not configured"
+        description="Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your local environment to enable account access."
+      />
+    );
+  }
+
+  if (!user) {
+    return <AuthView supabase={supabase} />;
   }
 
   return (
@@ -178,6 +260,13 @@ export default function HomePage() {
             <h2>{viewTitle(activeView)}</h2>
           </div>
           <div className="topbar-actions">
+            <div className="account-chip">
+              <Avatar initials={accountInitials(profile, user)} />
+              <span>
+                <strong>{profile?.display_name || user.email || "Manager"}</strong>
+                <small>Signed in</small>
+              </span>
+            </div>
             <button className="icon-button" type="button" aria-label="League lock">
               <Lock size={18} />
             </button>
@@ -219,8 +308,172 @@ export default function HomePage() {
             setPpr={setPpr}
             setTradeReview={setTradeReview}
             setWaiverLock={setWaiverLock}
+            supabase={supabase}
+            user={user}
+            profile={profile}
+            setProfile={setProfile}
           />
         )}
+      </section>
+    </main>
+  );
+}
+
+function AuthShell({ description, title }: { description: string; title: string }) {
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="brand auth-brand">
+          <div className="brand-mark">
+            <Trophy size={22} />
+          </div>
+          <div>
+            <p className="eyebrow">BAAL League</p>
+            <h1>Fantasy HQ</h1>
+          </div>
+        </div>
+        <div>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AuthView({ supabase }: { supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>> }) {
+  const [mode, setMode] = useState<AuthMode>("sign-in");
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submitAuth() {
+    setSubmitting(true);
+    setError("");
+    setStatus("");
+
+    const trimmedEmail = email.trim();
+    const authResult =
+      mode === "sign-in"
+        ? await supabase.auth.signInWithPassword({ email: trimmedEmail, password })
+        : await supabase.auth.signUp({
+            email: trimmedEmail,
+            password,
+            options: {
+              data: {
+                display_name: displayName.trim() || trimmedEmail.split("@")[0]
+              }
+            }
+          });
+
+    setSubmitting(false);
+
+    if (authResult.error) {
+      setError(authResult.error.message);
+      return;
+    }
+
+    if (mode === "sign-up" && !authResult.data.session) {
+      setStatus("Check your email to confirm the account, then sign in.");
+    }
+  }
+
+  async function sendPasswordReset() {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError("Enter your email first.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setStatus("");
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: window.location.origin
+    });
+    setSubmitting(false);
+
+    if (resetError) {
+      setError(resetError.message);
+      return;
+    }
+
+    setStatus("Password reset email sent.");
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="brand auth-brand">
+          <div className="brand-mark">
+            <Trophy size={22} />
+          </div>
+          <div>
+            <p className="eyebrow">BAAL League</p>
+            <h1>Fantasy HQ</h1>
+          </div>
+        </div>
+
+        <div className="auth-copy">
+          <h2>{mode === "sign-in" ? "Sign in to your league" : "Create your manager account"}</h2>
+          <p>Accounts are backed by Supabase Auth and connected to the league profile table.</p>
+        </div>
+
+        <form
+          className="auth-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitAuth();
+          }}
+        >
+          <div className="auth-mode-switch">
+            <button className={mode === "sign-in" ? "selected" : ""} onClick={() => setMode("sign-in")} type="button">
+              Sign in
+            </button>
+            <button className={mode === "sign-up" ? "selected" : ""} onClick={() => setMode("sign-up")} type="button">
+              Sign up
+            </button>
+          </div>
+
+          {mode === "sign-up" && (
+            <label className="form-field">
+              <span>Display name</span>
+              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+            </label>
+          )}
+
+          <label className="form-field">
+            <span>Email</span>
+            <input autoComplete="email" required type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+
+          <label className="form-field">
+            <span>Password</span>
+            <input
+              autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+              minLength={6}
+              required
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+
+          {error && <p className="form-message error">{error}</p>}
+          {status && <p className="form-message success">{status}</p>}
+
+          <button className="primary-action auth-submit" disabled={submitting} type="submit">
+            {submitting ? "Working..." : mode === "sign-in" ? "Sign in" : "Create account"}
+          </button>
+          {mode === "sign-in" && (
+            <button className="text-button" disabled={submitting} onClick={() => void sendPasswordReset()} type="button">
+              Send password reset
+            </button>
+          )}
+        </form>
       </section>
     </main>
   );
@@ -903,25 +1156,161 @@ function RostersView({
 
 function SettingsView({
   pprEnabled,
+  profile,
   rules,
+  setProfile,
   tradeReview,
   updateRule,
+  user,
   waiverLock,
   setPpr,
   setTradeReview,
-  setWaiverLock
+  setWaiverLock,
+  supabase
 }: {
   pprEnabled: boolean;
+  profile: Profile | null;
   rules: ScoringRules;
+  setProfile: (profile: Profile | null) => void;
   tradeReview: boolean;
   updateRule: (key: keyof ScoringRules, rawValue: string) => void;
+  user: User;
   waiverLock: boolean;
   setPpr: (value: boolean) => void;
   setTradeReview: (value: boolean) => void;
   setWaiverLock: (value: boolean) => void;
+  supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>;
 }) {
+  const [displayName, setDisplayName] = useState(profile?.display_name ?? "");
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? "");
+  const [email, setEmail] = useState(user.email ?? "");
+  const [password, setPassword] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
+  const [accountError, setAccountError] = useState("");
+  const [savingAccount, setSavingAccount] = useState(false);
+
+  useEffect(() => {
+    setDisplayName(profile?.display_name ?? "");
+    setAvatarUrl(profile?.avatar_url ?? "");
+  }, [profile]);
+
+  useEffect(() => {
+    setEmail(user.email ?? "");
+  }, [user.email]);
+
+  async function saveProfile() {
+    setSavingAccount(true);
+    setAccountError("");
+    setAccountStatus("");
+
+    const nextProfile = {
+      avatar_url: avatarUrl.trim() || null,
+      display_name: displayName.trim()
+    };
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update(nextProfile)
+      .eq("id", user.id)
+      .select("id, display_name, avatar_url")
+      .single();
+
+    setSavingAccount(false);
+
+    if (error) {
+      setAccountError(error.message);
+      return;
+    }
+
+    setProfile(data);
+    setAccountStatus("Profile updated.");
+  }
+
+  async function saveLogin() {
+    setSavingAccount(true);
+    setAccountError("");
+    setAccountStatus("");
+
+    const updates: { email?: string; password?: string } = {};
+    if (email.trim() && email.trim() !== user.email) {
+      updates.email = email.trim();
+    }
+    if (password) {
+      updates.password = password;
+    }
+
+    if (!updates.email && !updates.password) {
+      setSavingAccount(false);
+      setAccountStatus("No login changes to save.");
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser(updates);
+    setSavingAccount(false);
+
+    if (error) {
+      setAccountError(error.message);
+      return;
+    }
+
+    setPassword("");
+    setAccountStatus(updates.email ? "Login updated. Confirm the new email if Supabase requires it." : "Password updated.");
+  }
+
   return (
     <div className="view-grid settings-grid">
+      <section className="section-panel account-panel">
+        <PanelTitle icon={Settings} title="Account" />
+        <div className="account-summary">
+          <Avatar initials={accountInitials(profile, user)} />
+          <div>
+            <strong>{profile?.display_name || user.email || "Manager"}</strong>
+            <span>{user.email}</span>
+          </div>
+        </div>
+
+        <div className="account-form-grid">
+          <label className="form-field">
+            <span>Display name</span>
+            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>Avatar URL</span>
+            <input type="url" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} />
+          </label>
+          <button className="primary-action account-action" disabled={savingAccount} onClick={() => void saveProfile()} type="button">
+            Save profile
+          </button>
+        </div>
+
+        <div className="account-form-grid">
+          <label className="form-field">
+            <span>Email</span>
+            <input autoComplete="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </label>
+          <label className="form-field">
+            <span>New password</span>
+            <input
+              autoComplete="new-password"
+              minLength={6}
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          <button className="primary-action account-action" disabled={savingAccount} onClick={() => void saveLogin()} type="button">
+            Save login
+          </button>
+        </div>
+
+        {accountError && <p className="form-message error">{accountError}</p>}
+        {accountStatus && <p className="form-message success">{accountStatus}</p>}
+
+        <button className="text-button danger" onClick={() => void supabase.auth.signOut()} type="button">
+          Sign out
+        </button>
+      </section>
+
       <section className="section-panel scoring-settings">
         <PanelTitle icon={SlidersHorizontal} title="Scoring Rules" />
         <div className="settings-list">
@@ -1276,6 +1665,16 @@ function tradeModeLabel(mode: TradeMode): string {
 
 function toggleId(ids: string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((existingId) => existingId !== id) : [...ids, id];
+}
+
+function accountInitials(profile: Profile | null, user: User): string {
+  const source = profile?.display_name || user.email || "Manager";
+  const parts = source
+    .replace(/@.*/, "")
+    .split(/\s+|[._-]/)
+    .filter(Boolean);
+
+  return (parts[0]?.[0] ?? "M").concat(parts[1]?.[0] ?? "").toUpperCase();
 }
 
 function signedNumber(value: number): string {
