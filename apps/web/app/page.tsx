@@ -361,7 +361,7 @@ export default function HomePage() {
             setSelectedTeamId={setSelectedTeamId}
           />
         )}
-        {activeView === "chat" && <ChatView />}
+        {activeView === "chat" && <ChatView profile={profile} user={user} />}
         {activeView === "trade" && (
           <TradeBuilderView
             partnerTradeTeamId={partnerTradeTeamId}
@@ -802,14 +802,15 @@ function TradeBuilderView({
   );
 }
 
-function ChatView() {
+function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
   const [chatMode, setChatMode] = useState<ChatMode>("league");
   const [leagueMessages, setLeagueMessages] = useState<ChatMessage[]>(initialLeagueChatMessages);
   const [dmThreads, setDmThreads] = useState<DirectThread[]>(initialDirectThreads);
   const [selectedThreadId, setSelectedThreadId] = useState(initialDirectThreads[0].id);
   const [draft, setDraft] = useState("");
 
-  const activeManagers = leagueMembers.filter((member) => member.manager !== "Aazma");
+  const selfIdentity = getChatIdentity(profile, user);
+  const activeManagers = leagueMembers.filter((member) => !isSameManager(member.manager, selfIdentity.manager));
   const selectedThread = dmThreads.find((thread) => thread.id === selectedThreadId);
   const selectedMember =
     activeManagers.find((member) => `dm-${managerSlug(member.manager)}` === selectedThreadId) ?? activeManagers[0];
@@ -842,9 +843,9 @@ function ChatView() {
 
     const message: ChatMessage = {
       id: `local-${Date.now()}`,
-      author: "Aazma",
-      team: "Fourth Down Syndicate",
-      initials: "AZ",
+      author: selfIdentity.manager,
+      team: selfIdentity.team,
+      initials: selfIdentity.initials,
       body,
       sentAt: "Now",
       isSelf: true
@@ -973,8 +974,8 @@ function ChatView() {
         <div className="member-list">
           {leagueMembers.map((member) => (
             <button
-              className={member.manager === "Aazma" ? "member-row self-member" : "member-row"}
-              disabled={member.manager === "Aazma"}
+              className={isSameManager(member.manager, selfIdentity.manager) ? "member-row self-member" : "member-row"}
+              disabled={isSameManager(member.manager, selfIdentity.manager)}
               key={member.manager}
               onClick={() => openDirectMessage(member)}
               type="button"
@@ -984,7 +985,7 @@ function ChatView() {
                 <strong>{member.manager}</strong>
                 <span>{member.team}</span>
               </div>
-              {member.manager !== "Aazma" && <small>DM</small>}
+              {!isSameManager(member.manager, selfIdentity.manager) && <small>DM</small>}
             </button>
           ))}
         </div>
@@ -2126,6 +2127,27 @@ function accountInitials(profile: Profile | null, user: User): string {
     .filter(Boolean);
 
   return (parts[0]?.[0] ?? "M").concat(parts[1]?.[0] ?? "").toUpperCase();
+}
+
+function getChatIdentity(profile: Profile | null, user: User) {
+  const displayName = profile?.display_name?.trim();
+  const emailName = user.email?.split("@")[0] ?? "Manager";
+  const manager = displayName || emailName;
+  const matchedMember = leagueMembers.find((member) => isSameManager(member.manager, manager));
+
+  return {
+    initials: matchedMember?.initials ?? accountInitials(profile, user),
+    manager: matchedMember?.manager ?? manager,
+    team: matchedMember?.team ?? "Free Agent Manager"
+  };
+}
+
+function isSameManager(first: string, second: string): boolean {
+  return normalizeManagerName(first) === normalizeManagerName(second);
+}
+
+function normalizeManagerName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 async function getAccessToken(supabase: BrowserSupabaseClient): Promise<string | null> {
