@@ -51,7 +51,10 @@ import {
   type TradeAsset,
   type TradeTeam
 } from "../lib/sample-data";
-import { createBrowserSupabaseClient } from "../lib/supabase";
+import {
+  createRuntimeBrowserSupabaseClient,
+  type BrowserSupabaseClient
+} from "../lib/supabase";
 import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
 
 type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "trade" | "map" | "settings";
@@ -141,7 +144,8 @@ const scoringInputs: Array<{ key: keyof ScoringRules; label: string; suffix: str
 ];
 
 export default function HomePage() {
-  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
+  const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
+  const [configResolved, setConfigResolved] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -162,6 +166,27 @@ export default function HomePage() {
   const selectedScore = useMemo(() => scoreTeam(selectedTeam, rules), [rules, selectedTeam]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    createRuntimeBrowserSupabaseClient().then((client) => {
+      if (!isMounted) {
+        return;
+      }
+
+      setSupabase(client);
+      setConfigResolved(true);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!configResolved) {
+      return;
+    }
+
     if (!supabase) {
       setAuthLoading(false);
       return;
@@ -186,7 +211,7 @@ export default function HomePage() {
       isMounted = false;
       listener.subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, [configResolved, supabase]);
 
   useEffect(() => {
     if (!supabase || !user) {
@@ -228,7 +253,7 @@ export default function HomePage() {
     }));
   }
 
-  if (authLoading) {
+  if (!configResolved || authLoading) {
     return <AuthShell title="Checking session" description="Connecting to Supabase authentication." />;
   }
 
@@ -377,7 +402,7 @@ function AuthShell({ description, title }: { description: string; title: string 
   );
 }
 
-function AuthView({ supabase }: { supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>> }) {
+function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -1215,7 +1240,7 @@ function SettingsView({
   setPpr: (value: boolean) => void;
   setTradeReview: (value: boolean) => void;
   setWaiverLock: (value: boolean) => void;
-  supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>;
+  supabase: BrowserSupabaseClient;
 }) {
   const [displayName, setDisplayName] = useState(profile?.display_name ?? "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? "");
@@ -1385,7 +1410,7 @@ function SettingsView({
   );
 }
 
-function AdminPanel({ supabase }: { supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>> }) {
+function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [passwordsByUser, setPasswordsByUser] = useState<Record<string, string>>({});
   const [loadingAdmin, setLoadingAdmin] = useState(true);
@@ -1895,7 +1920,7 @@ function accountInitials(profile: Profile | null, user: User): string {
   return (parts[0]?.[0] ?? "M").concat(parts[1]?.[0] ?? "").toUpperCase();
 }
 
-async function getAccessToken(supabase: NonNullable<ReturnType<typeof createBrowserSupabaseClient>>): Promise<string | null> {
+async function getAccessToken(supabase: BrowserSupabaseClient): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
