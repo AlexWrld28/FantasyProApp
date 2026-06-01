@@ -210,6 +210,7 @@ export function formatRosterPlayer(player: PlayerRow, rosterSlot: string) {
     projectedPoints: getNumberMetadata(metadata, "projected_points") ?? 0,
     risk: getNumberMetadata(metadata, "risk") ?? 30,
     rosterSlot,
+    stats: getStatsMetadata(metadata),
     status: rosterSlot === "FA" ? "free-agent" : rosterSlot === "BN" ? "bench" : "active",
     team: player.team ?? "FA",
     tradeValue: getNumberMetadata(metadata, "trade_value") ?? 50,
@@ -289,4 +290,9 @@ function getNumberMetadata(metadata: Record<string, unknown>, key: string): numb
 function getStringMetadata(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getStatsMetadata(metadata: Record<string, unknown>) {
+  const value = metadata.stats;
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
