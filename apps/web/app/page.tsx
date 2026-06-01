@@ -504,6 +504,9 @@ export default function HomePage() {
             selectedScore={selectedScore}
             selectedTeamId={selectedTeamId}
             setSelectedTeamId={setSelectedTeamId}
+            setRosterError={setRosterError}
+            setRosterSnapshot={setRosterSnapshot}
+            supabase={supabase}
             teams={rosterTeams}
           />
         )}
@@ -2054,7 +2057,10 @@ function RostersView({
   rosterLoading,
   selectedScore,
   selectedTeamId,
+  setRosterError,
+  setRosterSnapshot,
   setSelectedTeamId,
+  supabase,
   teams
 }: {
   freeAgents: RosterPlayer[];
@@ -2062,9 +2068,51 @@ function RostersView({
   rosterLoading: boolean;
   selectedScore: ReturnType<typeof scoreTeam> | null;
   selectedTeamId: string;
+  setRosterError: (error: string) => void;
+  setRosterSnapshot: (snapshot: RosterSnapshot | null) => void;
   setSelectedTeamId: (teamId: string) => void;
+  supabase: BrowserSupabaseClient;
   teams: RosterTeam[];
 }) {
+  const [acquiringPlayerId, setAcquiringPlayerId] = useState<string | null>(null);
+  const [acquisitionStatus, setAcquisitionStatus] = useState("");
+
+  async function acquirePlayer(playerId: string) {
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setRosterError("Your session expired. Sign in again.");
+      return;
+    }
+
+    setAcquiringPlayerId(playerId);
+    setAcquisitionStatus("");
+    setRosterError("");
+
+    const response = await fetch("/api/rosters", {
+      body: JSON.stringify({
+        action: "claim",
+        playerId,
+        rosterSlot: "BN"
+      }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "PATCH"
+    });
+    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+
+    setAcquiringPlayerId(null);
+
+    if (!response.ok || !payload.teams) {
+      setRosterError(payload.error ?? "Unable to acquire player.");
+      return;
+    }
+
+    setRosterSnapshot(payload as RosterSnapshot);
+    setAcquisitionStatus("Player added to your bench.");
+  }
+
   if (rosterLoading) {
     return (
       <div className="view-grid roster-grid">
@@ -2117,7 +2165,13 @@ function RostersView({
 
       <section className="section-panel roster-table-panel">
         <PanelTitle icon={Search} title="Free Agents" />
-        <RosterTable players={freeAgents} />
+        {acquisitionStatus && <p className="form-message success">{acquisitionStatus}</p>}
+        <RosterTable
+          actionLabel="Acquire"
+          actionLoadingId={acquiringPlayerId}
+          onPlayerAction={(playerId) => void acquirePlayer(playerId)}
+          players={freeAgents}
+        />
       </section>
     </div>
   );
@@ -2640,7 +2694,17 @@ function TeamScoreColumn({ score }: { score: ReturnType<typeof scoreTeam> }) {
   );
 }
 
-function RosterTable({ players }: { players: FantasyPlayer[] }) {
+function RosterTable({
+  actionLabel,
+  actionLoadingId,
+  onPlayerAction,
+  players
+}: {
+  actionLabel?: string;
+  actionLoadingId?: string | null;
+  onPlayerAction?: (playerId: string) => void;
+  players: FantasyPlayer[];
+}) {
   return (
     <div className="table-shell">
       <table>
@@ -2652,31 +2716,52 @@ function RosterTable({ players }: { players: FantasyPlayer[] }) {
             <th>Team</th>
             <th>Status</th>
             <th>Proj</th>
+            {onPlayerAction && <th>Action</th>}
           </tr>
         </thead>
         <tbody>
-          {players.map((player) => (
-            <tr key={player.id}>
-              <td>{player.rosterSlot}</td>
-              <td>
-                <span className="roster-player-cell">
-                  <PlayerImage
-                    className="roster-headshot"
-                    fallback={player.position}
-                    imageUrl={player.imageUrl}
-                    name={player.name}
-                  />
-                  <span>{player.name}</span>
-                </span>
+          {players.length ? (
+            players.map((player) => (
+              <tr key={player.id}>
+                <td>{player.rosterSlot}</td>
+                <td>
+                  <span className="roster-player-cell">
+                    <PlayerImage
+                      className="roster-headshot"
+                      fallback={player.position}
+                      imageUrl={player.imageUrl}
+                      name={player.name}
+                    />
+                    <span>{player.name}</span>
+                  </span>
+                </td>
+                <td>{player.position}</td>
+                <td>{player.team}</td>
+                <td>
+                  <span className={`status-pill ${player.status}`}>{player.status}</span>
+                </td>
+                <td>{formatPoints(player.projectedPoints)}</td>
+                {onPlayerAction && (
+                  <td>
+                    <button
+                      className="table-action-button"
+                      disabled={actionLoadingId === player.id}
+                      onClick={() => onPlayerAction(player.id)}
+                      type="button"
+                    >
+                      {actionLoadingId === player.id ? "Adding..." : actionLabel ?? "Select"}
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={onPlayerAction ? 7 : 6}>
+                <p className="empty-state">No players to show.</p>
               </td>
-              <td>{player.position}</td>
-              <td>{player.team}</td>
-              <td>
-                <span className={`status-pill ${player.status}`}>{player.status}</span>
-              </td>
-              <td>{formatPoints(player.projectedPoints)}</td>
             </tr>
-          ))}
+          )}
         </tbody>
       </table>
     </div>

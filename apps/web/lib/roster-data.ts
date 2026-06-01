@@ -27,6 +27,8 @@ type TeamRow = {
   waiver_priority: number;
 };
 
+export type RosterSnapshot = Awaited<ReturnType<typeof getRosterSnapshot>>;
+
 type ProfileRow = {
   avatar_url: string | null;
   display_name: string;
@@ -120,6 +122,21 @@ export async function getRosterSnapshot(supabase: SupabaseAdminClient) {
       };
     })
   };
+}
+
+export async function findUserTeamId(supabase: SupabaseAdminClient, userId: string, leagueId: string) {
+  const { data: team, error } = await supabase
+    .from("teams")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("manager_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return typeof team?.id === "string" ? team.id : null;
 }
 
 export async function ensureRosterLeague(supabase: SupabaseAdminClient, users: User[]) {
