@@ -1,5 +1,5 @@
 import { getAuthenticatedContext } from "../../../lib/admin-auth";
-import { findUserTeamId, getRosterSnapshot } from "../../../lib/roster-data";
+import { findUserTeam, getRosterSnapshot } from "../../../lib/roster-data";
 
 export async function GET(request: Request) {
   const context = await getAuthenticatedContext(request);
@@ -23,10 +23,12 @@ export async function PATCH(request: Request) {
 
   const body = (await request.json()) as {
     action?: unknown;
+    faabBid?: unknown;
     playerId?: unknown;
     rosterSlot?: unknown;
   };
   const action = typeof body.action === "string" ? body.action : "";
+  const faabBid = typeof body.faabBid === "number" && Number.isFinite(body.faabBid) ? Math.max(0, Math.floor(body.faabBid)) : 0;
   const playerId = typeof body.playerId === "string" ? body.playerId : "";
   const rosterSlot = typeof body.rosterSlot === "string" && body.rosterSlot ? body.rosterSlot : "BN";
 
@@ -52,18 +54,34 @@ export async function PATCH(request: Request) {
     }
 
     const userId = context.user.id;
-    const teamId = await findUserTeamId(context.supabase, userId, leagueId);
-    if (!teamId) {
+    const team = await findUserTeam(context.supabase, userId, leagueId);
+    if (!team) {
       return Response.json({ error: "Your roster team was not found." }, { status: 404 });
+    }
+
+    if (faabBid > team.faabRemaining) {
+      return Response.json({ error: "You do not have enough FAAB for that bid." }, { status: 400 });
+    }
+
+    const nextFaab = team.faabRemaining - faabBid;
+    const { error: faabError } = await context.supabase
+      .from("teams")
+      .update({ faab_remaining: nextFaab, updated_at: new Date().toISOString() })
+      .eq("id", team.id)
+      .gte("faab_remaining", faabBid);
+
+    if (faabError) {
+      return Response.json({ error: faabError.message }, { status: 500 });
     }
 
     const { error } = await context.supabase.from("team_players").insert({
       player_id: playerId,
       roster_slot: rosterSlot,
-      team_id: teamId
+      team_id: team.id
     });
 
     if (error) {
+      await context.supabase.from("teams").update({ faab_remaining: team.faabRemaining }).eq("id", team.id);
       return Response.json({ error: error.message }, { status: 500 });
     }
 

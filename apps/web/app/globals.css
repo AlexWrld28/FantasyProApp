@@ -882,8 +882,15 @@ th {
 }
 
 .roster-grid,
+.free-agency-grid,
+.roster-admin-grid,
 .settings-grid {
   grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+}
+
+.free-agency-grid,
+.roster-admin-grid {
+  grid-template-columns: 1fr;
 }
 
 .account-panel {
@@ -932,6 +939,86 @@ th {
   grid-column: 1 / -1;
 }
 
+.free-agency-panel {
+  display: grid;
+  gap: 14px;
+  grid-column: 1 / -1;
+}
+
+.free-agency-header {
+  align-items: center;
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.free-agency-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.free-agency-header span,
+.free-agent-main span,
+.free-agent-card p,
+.faab-claim-row label span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.free-agent-card-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.free-agent-card {
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.free-agent-main {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.free-agent-main div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.faab-claim-row {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 110px minmax(0, 1fr);
+}
+
+.faab-claim-row label {
+  display: grid;
+  gap: 5px;
+}
+
+.faab-claim-row input {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 900;
+  min-height: 42px;
+  padding: 0 10px;
+}
+
 .admin-panel-header {
   align-items: center;
   background: #f7f9f8;
@@ -962,6 +1049,64 @@ th {
 .roster-admin-list {
   display: grid;
   gap: 10px;
+}
+
+.roster-admin-board {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.roster-admin-column {
+  background: #f7f9f8;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  min-height: 220px;
+  padding: 12px;
+}
+
+.roster-admin-column-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.roster-admin-column-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.roster-admin-card-list {
+  display: grid;
+  gap: 8px;
+}
+
+.roster-admin-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: grab;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.roster-admin-card.moving {
+  opacity: 0.55;
+}
+
+.roster-admin-card select {
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 900;
+  min-height: 34px;
+  padding: 0 8px;
 }
 
 .roster-admin-row {
@@ -2352,7 +2497,7 @@ th {
   }
 
   .nav-list {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   }
 
   .nav-item {
@@ -2365,8 +2510,10 @@ th {
 
   .dashboard-grid,
   .chat-grid,
+  .free-agency-grid,
   .matchup-board,
   .map-grid,
+  .roster-admin-grid,
   .roster-grid,
   .settings-grid,
   .trade-grid {
@@ -2375,6 +2522,10 @@ th {
 
   .spotlight-grid {
     grid-template-columns: 1fr;
+  }
+
+  .free-agent-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .trade-builder-panel {
@@ -2394,6 +2545,7 @@ th {
   }
 
   .admin-data-grid,
+  .faab-claim-row,
   .admin-password-row,
   .roster-admin-row {
     grid-template-columns: 1fr;
@@ -2454,6 +2606,7 @@ th {
   }
 
   .trade-team-selectors,
+  .free-agent-card-grid,
   .trade-grade-row,
   .proposal-columns,
   .proposal-assets-grid,

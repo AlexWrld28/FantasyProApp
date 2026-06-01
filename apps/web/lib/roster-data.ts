@@ -125,9 +125,14 @@ export async function getRosterSnapshot(supabase: SupabaseAdminClient) {
 }
 
 export async function findUserTeamId(supabase: SupabaseAdminClient, userId: string, leagueId: string) {
+  const team = await findUserTeam(supabase, userId, leagueId);
+  return team?.id ?? null;
+}
+
+export async function findUserTeam(supabase: SupabaseAdminClient, userId: string, leagueId: string) {
   const { data: team, error } = await supabase
     .from("teams")
-    .select("id")
+    .select("id, faab_remaining")
     .eq("league_id", leagueId)
     .eq("manager_id", userId)
     .maybeSingle();
@@ -136,7 +141,12 @@ export async function findUserTeamId(supabase: SupabaseAdminClient, userId: stri
     throw new Error(error.message);
   }
 
-  return typeof team?.id === "string" ? team.id : null;
+  return typeof team?.id === "string"
+    ? {
+        faabRemaining: typeof team.faab_remaining === "number" ? team.faab_remaining : 0,
+        id: team.id
+      }
+    : null;
 }
 
 export async function ensureRosterLeague(supabase: SupabaseAdminClient, users: User[]) {

@@ -45,7 +45,16 @@ import {
 } from "../lib/supabase";
 import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
 
-type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "trade" | "map" | "settings";
+type ViewKey =
+  | "dashboard"
+  | "scoring"
+  | "rosters"
+  | "free-agency"
+  | "chat"
+  | "trade"
+  | "map"
+  | "roster-admin"
+  | "settings";
 type ChatMode = "league" | "dm";
 type TradeMode = "win-now" | "balanced" | "keeper";
 type TradeVoteChoice = "approve" | "veto";
@@ -203,9 +212,11 @@ const views: Array<{ key: ViewKey; label: string; icon: React.ComponentType<{ si
   { key: "dashboard", label: "Dashboard", icon: Home },
   { key: "scoring", label: "Scoring", icon: Gauge },
   { key: "rosters", label: "Rosters", icon: Users },
+  { key: "free-agency", label: "Free Agency", icon: Search },
   { key: "chat", label: "Chat", icon: MessageCircle },
   { key: "trade", label: "Trade", icon: ArrowLeftRight },
   { key: "map", label: "Map", icon: MapPinned },
+  { key: "roster-admin", label: "Roster Admin", icon: ClipboardList },
   { key: "settings", label: "Settings", icon: Settings }
 ];
 
@@ -498,16 +509,24 @@ export default function HomePage() {
         {activeView === "scoring" && <ScoringView matchup={matchup} rosterError={rosterError} rosterLoading={rosterLoading} />}
         {activeView === "rosters" && (
           <RostersView
-            freeAgents={rosterSnapshot?.freeAgents ?? []}
             rosterError={rosterError}
             rosterLoading={rosterLoading}
             selectedScore={selectedScore}
             selectedTeamId={selectedTeamId}
             setSelectedTeamId={setSelectedTeamId}
+            teams={rosterTeams}
+          />
+        )}
+        {activeView === "free-agency" && (
+          <FreeAgencyView
+            freeAgents={rosterSnapshot?.freeAgents ?? []}
+            rosterError={rosterError}
+            rosterLoading={rosterLoading}
             setRosterError={setRosterError}
             setRosterSnapshot={setRosterSnapshot}
             supabase={supabase}
             teams={rosterTeams}
+            user={user}
           />
         )}
         {activeView === "chat" && <ChatView profile={profile} supabase={supabase} user={user} />}
@@ -527,6 +546,7 @@ export default function HomePage() {
         {activeView === "map" && (
           <MapView selectedStadium={selectedStadium} setSelectedStadiumId={setSelectedStadiumId} />
         )}
+        {activeView === "roster-admin" && <RosterAdminView supabase={supabase} />}
         {activeView === "settings" && (
           <SettingsView
             pprEnabled={pprEnabled}
@@ -2052,66 +2072,20 @@ function ScoringView({
 }
 
 function RostersView({
-  freeAgents,
   rosterError,
   rosterLoading,
   selectedScore,
   selectedTeamId,
-  setRosterError,
-  setRosterSnapshot,
   setSelectedTeamId,
-  supabase,
   teams
 }: {
-  freeAgents: RosterPlayer[];
   rosterError: string;
   rosterLoading: boolean;
   selectedScore: ReturnType<typeof scoreTeam> | null;
   selectedTeamId: string;
-  setRosterError: (error: string) => void;
-  setRosterSnapshot: (snapshot: RosterSnapshot | null) => void;
   setSelectedTeamId: (teamId: string) => void;
-  supabase: BrowserSupabaseClient;
   teams: RosterTeam[];
 }) {
-  const [acquiringPlayerId, setAcquiringPlayerId] = useState<string | null>(null);
-  const [acquisitionStatus, setAcquisitionStatus] = useState("");
-
-  async function acquirePlayer(playerId: string) {
-    const token = await getAccessToken(supabase);
-    if (!token) {
-      setRosterError("Your session expired. Sign in again.");
-      return;
-    }
-
-    setAcquiringPlayerId(playerId);
-    setAcquisitionStatus("");
-    setRosterError("");
-
-    const response = await fetch("/api/rosters", {
-      body: JSON.stringify({
-        action: "claim",
-        playerId,
-        rosterSlot: "BN"
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      method: "PATCH"
-    });
-    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
-
-    setAcquiringPlayerId(null);
-
-    if (!response.ok || !payload.teams) {
-      setRosterError(payload.error ?? "Unable to acquire player.");
-      return;
-    }
-
-    setRosterSnapshot(payload as RosterSnapshot);
-    setAcquisitionStatus("Player added to your bench.");
-  }
 
   if (rosterLoading) {
     return (
@@ -2162,16 +2136,145 @@ function RostersView({
         <PanelTitle icon={Shield} title={`${selectedScore.team.name} Roster`} />
         <RosterTable players={selectedScore.team.roster} />
       </section>
+    </div>
+  );
+}
 
-      <section className="section-panel roster-table-panel">
-        <PanelTitle icon={Search} title="Free Agents" />
+function FreeAgencyView({
+  freeAgents,
+  rosterError,
+  rosterLoading,
+  setRosterError,
+  setRosterSnapshot,
+  supabase,
+  teams,
+  user
+}: {
+  freeAgents: RosterPlayer[];
+  rosterError: string;
+  rosterLoading: boolean;
+  setRosterError: (error: string) => void;
+  setRosterSnapshot: (snapshot: RosterSnapshot | null) => void;
+  supabase: BrowserSupabaseClient;
+  teams: RosterTeam[];
+  user: User;
+}) {
+  const [acquiringPlayerId, setAcquiringPlayerId] = useState<string | null>(null);
+  const [acquisitionStatus, setAcquisitionStatus] = useState("");
+  const [faabBids, setFaabBids] = useState<Record<string, string>>({});
+  const currentTeam = teams.find((team) => team.managerId === user.id) ?? null;
+
+  async function acquirePlayer(playerId: string) {
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setRosterError("Your session expired. Sign in again.");
+      return;
+    }
+
+    const faabBid = Math.max(0, Math.floor(Number(faabBids[playerId] || "0")));
+    if (!Number.isFinite(faabBid)) {
+      setRosterError("Enter a valid FAAB bid.");
+      return;
+    }
+
+    setAcquiringPlayerId(playerId);
+    setAcquisitionStatus("");
+    setRosterError("");
+
+    const response = await fetch("/api/rosters", {
+      body: JSON.stringify({
+        action: "claim",
+        faabBid,
+        playerId,
+        rosterSlot: "BN"
+      }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "PATCH"
+    });
+    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+
+    setAcquiringPlayerId(null);
+
+    if (!response.ok || !payload.teams) {
+      setRosterError(payload.error ?? "Unable to acquire player.");
+      return;
+    }
+
+    setRosterSnapshot(payload as RosterSnapshot);
+    setFaabBids((current) => ({ ...current, [playerId]: "" }));
+    setAcquisitionStatus(`Claim processed for $${faabBid} FAAB.`);
+  }
+
+  if (rosterLoading) {
+    return (
+      <div className="view-grid roster-grid">
+        <section className="section-panel roster-table-panel">
+          <PanelTitle icon={Search} title="Free Agency" />
+          <p className="empty-state">Loading free agents...</p>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="view-grid free-agency-grid">
+      <section className="section-panel free-agency-panel">
+        <PanelTitle icon={Search} title="Free Agency" />
+        <div className="free-agency-header">
+          <div>
+            <strong>{currentTeam?.name ?? "No roster found"}</strong>
+            <span>Submit a FAAB bid to add a free agent directly to your bench.</span>
+          </div>
+          <Metric label="FAAB" value={`$${currentTeam?.faabRemaining ?? 0}`} />
+        </div>
+        {rosterError && <p className="form-message error">{rosterError}</p>}
         {acquisitionStatus && <p className="form-message success">{acquisitionStatus}</p>}
-        <RosterTable
-          actionLabel="Acquire"
-          actionLoadingId={acquiringPlayerId}
-          onPlayerAction={(playerId) => void acquirePlayer(playerId)}
-          players={freeAgents}
-        />
+        <div className="free-agent-card-grid">
+          {freeAgents.length ? (
+            freeAgents.map((player) => (
+              <article className="free-agent-card" key={player.id}>
+                <div className="free-agent-main">
+                  <PlayerImage
+                    className="roster-headshot"
+                    fallback={player.position}
+                    imageUrl={player.imageUrl}
+                    name={player.name}
+                  />
+                  <div>
+                    <strong>{player.name}</strong>
+                    <span>{player.position} | {player.team} | {formatPoints(player.projectedPoints)} proj</span>
+                  </div>
+                </div>
+                <p>{player.note || "Available for FAAB claim."}</p>
+                <div className="faab-claim-row">
+                  <label>
+                    <span>FAAB bid</span>
+                    <input
+                      min="0"
+                      max={currentTeam?.faabRemaining ?? 0}
+                      type="number"
+                      value={faabBids[player.id] ?? "0"}
+                      onChange={(event) => setFaabBids((current) => ({ ...current, [player.id]: event.target.value }))}
+                    />
+                  </label>
+                  <button
+                    className="primary-action"
+                    disabled={!currentTeam || acquiringPlayerId === player.id}
+                    onClick={() => void acquirePlayer(player.id)}
+                    type="button"
+                  >
+                    {acquiringPlayerId === player.id ? "Claiming..." : "Claim player"}
+                  </button>
+                </div>
+              </article>
+            ))
+          ) : (
+            <p className="empty-state">No free agents are available right now.</p>
+          )}
+        </div>
       </section>
     </div>
   );
@@ -2374,13 +2477,11 @@ function SettingsView({
 
 function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
-  const [adminRoster, setAdminRoster] = useState<RosterSnapshot | null>(null);
   const [passwordsByUser, setPasswordsByUser] = useState<Record<string, string>>({});
   const [loadingAdmin, setLoadingAdmin] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminError, setAdminError] = useState("");
   const [adminStatus, setAdminStatus] = useState("");
-  const [assigningPlayerId, setAssigningPlayerId] = useState<string | null>(null);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2395,18 +2496,11 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
         return;
       }
 
-      const [userResponse, rosterResponse] = await Promise.all([
-        fetch("/api/admin/users", {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }),
-        fetch("/api/admin/rosters", {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
-      ]);
+      const userResponse = await fetch("/api/admin/users", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
 
       if (!isMounted) {
         return;
@@ -2414,27 +2508,20 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
 
       setLoadingAdmin(false);
 
-      if (userResponse.status === 403 || rosterResponse.status === 403) {
+      if (userResponse.status === 403) {
         setIsAdmin(false);
         return;
       }
 
       const userPayload = (await userResponse.json()) as { error?: string; users?: AdminUser[] };
-      const rosterPayload = (await rosterResponse.json()) as { error?: string } & Partial<RosterSnapshot>;
 
       if (!userResponse.ok) {
         setAdminError(userPayload.error ?? "Unable to load admin users.");
         return;
       }
 
-      if (!rosterResponse.ok || !rosterPayload.teams) {
-        setAdminError(rosterPayload.error ?? "Unable to load roster admin.");
-        return;
-      }
-
       setIsAdmin(true);
       setAdminUsers(userPayload.users ?? []);
-      setAdminRoster(rosterPayload as RosterSnapshot);
     }
 
     void loadAdminUsers();
@@ -2482,42 +2569,6 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
     setAdminStatus("Password updated.");
   }
 
-  async function assignRosterPlayer(playerId: string, managerId: string, rosterSlot: string) {
-    const token = await getAccessToken(supabase);
-    if (!token) {
-      setAdminError("Your session expired. Sign in again.");
-      return;
-    }
-
-    setAssigningPlayerId(playerId);
-    setAdminError("");
-    setAdminStatus("");
-
-    const response = await fetch("/api/admin/rosters", {
-      body: JSON.stringify({
-        managerId: managerId || null,
-        playerId,
-        rosterSlot
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      method: "PATCH"
-    });
-    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
-
-    setAssigningPlayerId(null);
-
-    if (!response.ok || !payload.teams) {
-      setAdminError(payload.error ?? "Unable to update roster assignment.");
-      return;
-    }
-
-    setAdminRoster(payload as RosterSnapshot);
-    setAdminStatus(managerId ? "Player assigned." : "Player moved to free agency.");
-  }
-
   if (loadingAdmin) {
     return null;
   }
@@ -2527,7 +2578,6 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
   }
 
   return (
-    <>
     <section className="section-panel admin-panel">
       <PanelTitle icon={Shield} title="Admin Roster" />
       <div className="admin-panel-header">
@@ -2593,71 +2643,237 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
         ))}
       </div>
     </section>
-    {adminRoster && (
+  );
+}
+
+function RosterAdminView({ supabase }: { supabase: BrowserSupabaseClient }) {
+  const [adminRoster, setAdminRoster] = useState<RosterSnapshot | null>(null);
+  const [loadingAdmin, setLoadingAdmin] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const [adminStatus, setAdminStatus] = useState("");
+  const [movingPlayerId, setMovingPlayerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadRosterAdmin() {
+      const token = await getAccessToken(supabase);
+      if (!token) {
+        if (isMounted) {
+          setLoadingAdmin(false);
+        }
+        return;
+      }
+
+      const response = await fetch("/api/admin/rosters", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!isMounted) {
+        return;
+      }
+
+      setLoadingAdmin(false);
+
+      if (response.status === 403) {
+        setIsAdmin(false);
+        return;
+      }
+
+      const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+      if (!response.ok || !payload.teams) {
+        setAdminError(payload.error ?? "Unable to load roster admin.");
+        return;
+      }
+
+      setIsAdmin(true);
+      setAdminRoster(payload as RosterSnapshot);
+    }
+
+    void loadRosterAdmin();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase]);
+
+  async function assignRosterPlayer(playerId: string, managerId: string | null, rosterSlot: string) {
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setAdminError("Your session expired. Sign in again.");
+      return;
+    }
+
+    setMovingPlayerId(playerId);
+    setAdminError("");
+    setAdminStatus("");
+
+    const response = await fetch("/api/admin/rosters", {
+      body: JSON.stringify({
+        managerId,
+        playerId,
+        rosterSlot
+      }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "PATCH"
+    });
+    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+
+    setMovingPlayerId(null);
+
+    if (!response.ok || !payload.teams) {
+      setAdminError(payload.error ?? "Unable to update roster assignment.");
+      return;
+    }
+
+    setAdminRoster(payload as RosterSnapshot);
+    setAdminStatus(managerId ? "Player moved." : "Player moved to free agency.");
+  }
+
+  function handleDrop(event: React.DragEvent<HTMLElement>, managerId: string | null) {
+    event.preventDefault();
+    const playerId = event.dataTransfer.getData("text/plain");
+    if (!playerId) {
+      return;
+    }
+
+    void assignRosterPlayer(playerId, managerId, managerId ? "BN" : "FA");
+  }
+
+  if (loadingAdmin) {
+    return (
+      <div className="view-grid roster-admin-grid">
+        <section className="section-panel roster-admin-panel">
+          <PanelTitle icon={ClipboardList} title="Roster Admin" />
+          <p className="empty-state">Loading roster admin...</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="view-grid roster-admin-grid">
+        <section className="section-panel roster-admin-panel">
+          <PanelTitle icon={Shield} title="Roster Admin" />
+          <p className="empty-state">Admin access required.</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (!adminRoster) {
+    return (
+      <div className="view-grid roster-admin-grid">
+        <section className="section-panel roster-admin-panel">
+          <PanelTitle icon={ClipboardList} title="Roster Admin" />
+          <p className="empty-state">{adminError || "Roster admin is not available."}</p>
+        </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="view-grid roster-admin-grid">
       <section className="section-panel roster-admin-panel">
         <PanelTitle icon={ClipboardList} title="Roster Admin" />
         <div className="admin-panel-header">
           <div>
-            <strong>{adminRoster.teams.length} real rosters</strong>
-            <span>Assign players to accounts. Unassigned players remain free agents.</span>
+            <strong>Drag and drop roster control</strong>
+            <span>Move players between real accounts or drop them into free agency.</span>
           </div>
         </div>
-        <div className="roster-admin-list">
-          {[...adminRoster.teams.flatMap((team) => team.roster), ...adminRoster.freeAgents].map((player) => {
-            const owner = adminRoster.teams.find((team) => team.roster.some((rosteredPlayer) => rosteredPlayer.id === player.id));
-            return (
-              <article className="roster-admin-row" key={player.id}>
-                <span className="roster-player-cell">
-                  <PlayerImage
-                    className="roster-headshot"
-                    fallback={player.position}
-                    imageUrl={player.imageUrl}
-                    name={player.name}
-                  />
-                  <span>
-                    <strong>{player.name}</strong>
-                    <small>{player.position} | {player.team}</small>
-                  </span>
-                </span>
-                <label>
-                  <span>Owner</span>
-                  <select
-                    disabled={assigningPlayerId === player.id}
-                    value={owner?.managerId ?? ""}
-                    onChange={(event) =>
-                      void assignRosterPlayer(player.id, event.target.value, String(player.rosterSlot) === "FA" ? "BN" : player.rosterSlot)
-                    }
-                  >
-                    <option value="">Free agent</option>
-                    {adminRoster.teams.map((team) => (
-                      <option key={team.id} value={team.managerId ?? ""}>
-                        {team.manager}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Slot</span>
-                  <select
-                    disabled={assigningPlayerId === player.id || !owner}
-                    value={String(player.rosterSlot) === "FA" ? "BN" : player.rosterSlot}
-                    onChange={(event) => void assignRosterPlayer(player.id, owner?.managerId ?? "", event.target.value)}
-                  >
-                    {["QB", "RB", "WR", "TE", "FLEX", "K", "DST", "BN", "IR"].map((slot) => (
-                      <option key={slot} value={slot}>
-                        {slot}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <b>{owner?.name ?? "Free agent"}</b>
-              </article>
-            );
-          })}
+        {adminError && <p className="form-message error">{adminError}</p>}
+        {adminStatus && <p className="form-message success">{adminStatus}</p>}
+        <div className="roster-admin-board">
+          {adminRoster.teams.map((team) => (
+            <RosterAdminColumn
+              key={team.id}
+              movingPlayerId={movingPlayerId}
+              onDropPlayer={(event) => handleDrop(event, team.managerId)}
+              onSlotChange={(playerId, slot) => void assignRosterPlayer(playerId, team.managerId, slot)}
+              players={team.roster}
+              title={team.name}
+            />
+          ))}
+          <RosterAdminColumn
+            movingPlayerId={movingPlayerId}
+            onDropPlayer={(event) => handleDrop(event, null)}
+            players={adminRoster.freeAgents}
+            title="Free Agency"
+          />
         </div>
       </section>
-    )}
-    </>
+    </div>
+  );
+}
+
+function RosterAdminColumn({
+  movingPlayerId,
+  onDropPlayer,
+  onSlotChange,
+  players,
+  title
+}: {
+  movingPlayerId: string | null;
+  onDropPlayer: (event: React.DragEvent<HTMLElement>) => void;
+  onSlotChange?: (playerId: string, rosterSlot: string) => void;
+  players: RosterPlayer[];
+  title: string;
+}) {
+  return (
+    <section className="roster-admin-column" onDragOver={(event) => event.preventDefault()} onDrop={onDropPlayer}>
+      <div className="roster-admin-column-header">
+        <strong>{title}</strong>
+        <span>{players.length} players</span>
+      </div>
+      <div className="roster-admin-card-list">
+        {players.length ? (
+          players.map((player) => (
+            <article
+              className={movingPlayerId === player.id ? "roster-admin-card moving" : "roster-admin-card"}
+              draggable
+              key={player.id}
+              onDragStart={(event) => event.dataTransfer.setData("text/plain", player.id)}
+            >
+              <span className="roster-player-cell">
+                <PlayerImage
+                  className="roster-headshot"
+                  fallback={player.position}
+                  imageUrl={player.imageUrl}
+                  name={player.name}
+                />
+                <span>
+                  <strong>{player.name}</strong>
+                  <small>{player.position} | {player.team}</small>
+                </span>
+              </span>
+              {onSlotChange && (
+                <select
+                  aria-label={`Roster slot for ${player.name}`}
+                  value={String(player.rosterSlot) === "FA" ? "BN" : player.rosterSlot}
+                  onChange={(event) => onSlotChange(player.id, event.target.value)}
+                >
+                  {["QB", "RB", "WR", "TE", "FLEX", "K", "DST", "BN", "IR"].map((slot) => (
+                    <option key={slot} value={slot}>
+                      {slot}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </article>
+          ))
+        ) : (
+          <p className="empty-state">Drop players here.</p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -2935,12 +3151,16 @@ function viewTitle(view: ViewKey): string {
       return "Fantasy Scoring";
     case "rosters":
       return "Roster Room";
+    case "free-agency":
+      return "Free Agency";
     case "chat":
       return "League Chat";
     case "trade":
       return "Trade Builder";
     case "map":
       return "Team Map";
+    case "roster-admin":
+      return "Roster Admin";
     case "settings":
       return "League Settings";
     default:
