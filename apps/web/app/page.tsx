@@ -809,13 +809,30 @@ function ChatView() {
   const [selectedThreadId, setSelectedThreadId] = useState(initialDirectThreads[0].id);
   const [draft, setDraft] = useState("");
 
-  const selectedThread = dmThreads.find((thread) => thread.id === selectedThreadId) ?? dmThreads[0];
-  const activeMessages = chatMode === "league" ? leagueMessages : selectedThread.messages;
-  const activeTitle = chatMode === "league" ? "League Lobby" : selectedThread.manager;
+  const activeManagers = leagueMembers.filter((member) => member.manager !== "Aazma");
+  const selectedThread = dmThreads.find((thread) => thread.id === selectedThreadId);
+  const selectedMember =
+    activeManagers.find((member) => `dm-${managerSlug(member.manager)}` === selectedThreadId) ?? activeManagers[0];
+  const activeDmThread = selectedThread ?? createEmptyDirectThread(selectedMember);
+  const activeMessages = chatMode === "league" ? leagueMessages : activeDmThread.messages;
+  const activeTitle = chatMode === "league" ? "League Lobby" : activeDmThread.manager;
   const activeSubtitle =
     chatMode === "league"
       ? "League-wide trash talk, rulings, trades, and waiver chatter"
-      : `${selectedThread.team} | ${selectedThread.presence}`;
+      : `${activeDmThread.team} | ${activeDmThread.presence}`;
+
+  function openDirectMessage(member: (typeof leagueMembers)[number]) {
+    const threadId = `dm-${managerSlug(member.manager)}`;
+    setChatMode("dm");
+    setSelectedThreadId(threadId);
+    setDmThreads((threads) => {
+      if (threads.some((thread) => thread.id === threadId)) {
+        return threads.map((thread) => (thread.id === threadId ? { ...thread, unreadCount: 0 } : thread));
+      }
+
+      return [...threads, createEmptyDirectThread(member)];
+    });
+  }
 
   function sendMessage() {
     const body = draft.trim();
@@ -838,7 +855,7 @@ function ChatView() {
     } else {
       setDmThreads((threads) =>
         threads.map((thread) =>
-          thread.id === selectedThread.id
+          thread.id === activeDmThread.id
             ? {
                 ...thread,
                 lastMessage: body,
@@ -886,25 +903,28 @@ function ChatView() {
           </span>
         </button>
 
-        <div className="dm-thread-list">
-          {dmThreads.map((thread) => (
-            <button
-              className={chatMode === "dm" && selectedThread.id === thread.id ? "dm-thread active" : "dm-thread"}
-              key={thread.id}
-              onClick={() => {
-                setChatMode("dm");
-                setSelectedThreadId(thread.id);
-              }}
-              type="button"
-            >
-              <Avatar initials={thread.initials} presence={thread.presence} />
-              <span>
-                <strong>{thread.manager}</strong>
-                <small>{thread.lastMessage}</small>
-              </span>
-              {thread.unreadCount > 0 && <b>{thread.unreadCount}</b>}
-            </button>
-          ))}
+        <div className="dm-thread-list" aria-label="Start or open direct message">
+          <p className="dm-list-label">Active managers</p>
+          {activeManagers.map((member) => {
+            const thread = dmThreads.find((candidate) => candidate.id === `dm-${managerSlug(member.manager)}`);
+            const preview = thread?.lastMessage || "Start a direct conversation";
+            return (
+              <button
+                className={chatMode === "dm" && activeDmThread.manager === member.manager ? "dm-thread active" : "dm-thread"}
+                key={member.manager}
+                onClick={() => openDirectMessage(member)}
+                type="button"
+              >
+                <Avatar initials={member.initials} presence={member.presence} />
+                <span>
+                  <strong>{member.manager}</strong>
+                  <small>{preview}</small>
+                </span>
+                {thread && thread.unreadCount > 0 && <b>{thread.unreadCount}</b>}
+                {!thread && <em>New</em>}
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -918,9 +938,15 @@ function ChatView() {
         </div>
 
         <div className="message-list" aria-label={`${activeTitle} messages`}>
-          {activeMessages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
+          {activeMessages.length ? (
+            activeMessages.map((message) => <MessageBubble key={message.id} message={message} />)
+          ) : (
+            <div className="empty-dm-state">
+              <AtSign size={22} />
+              <strong>Start a conversation with {activeDmThread.manager}</strong>
+              <span>Send a trade idea, matchup note, or commissioner question directly.</span>
+            </div>
+          )}
         </div>
 
         <form
@@ -932,7 +958,7 @@ function ChatView() {
         >
           <input
             aria-label="Write a message"
-            placeholder={chatMode === "league" ? "Message the league" : `Message ${selectedThread.manager}`}
+            placeholder={chatMode === "league" ? "Message the league" : `Message ${activeDmThread.manager}`}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
@@ -946,18 +972,42 @@ function ChatView() {
         <PanelTitle icon={Users} title="Managers" />
         <div className="member-list">
           {leagueMembers.map((member) => (
-            <div className="member-row" key={member.manager}>
+            <button
+              className={member.manager === "Aazma" ? "member-row self-member" : "member-row"}
+              disabled={member.manager === "Aazma"}
+              key={member.manager}
+              onClick={() => openDirectMessage(member)}
+              type="button"
+            >
               <Avatar initials={member.initials} presence={member.presence} />
               <div>
                 <strong>{member.manager}</strong>
                 <span>{member.team}</span>
               </div>
-            </div>
+              {member.manager !== "Aazma" && <small>DM</small>}
+            </button>
           ))}
         </div>
       </section>
     </div>
   );
+}
+
+function createEmptyDirectThread(member: (typeof leagueMembers)[number]): DirectThread {
+  return {
+    id: `dm-${managerSlug(member.manager)}`,
+    initials: member.initials,
+    lastMessage: "Start a direct conversation",
+    manager: member.manager,
+    messages: [],
+    presence: member.presence,
+    team: member.team,
+    unreadCount: 0
+  };
+}
+
+function managerSlug(manager: string): string {
+  return manager.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
 function TradeAssetColumn({
