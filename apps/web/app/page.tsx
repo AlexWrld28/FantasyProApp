@@ -85,6 +85,15 @@ type ChatManager = {
   team: string;
 };
 
+type ApiDirectMessage = {
+  body: string;
+  createdAt: string;
+  id: string;
+  isSelf: boolean;
+  recipientId: string;
+  senderId: string;
+};
+
 type Profile = {
   avatar_url: string | null;
   display_name: string;
@@ -828,6 +837,9 @@ function ChatView({
   const [managersError, setManagersError] = useState("");
   const [managersLoading, setManagersLoading] = useState(true);
   const [selectedThreadId, setSelectedThreadId] = useState("");
+  const [messageError, setMessageError] = useState("");
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const [draft, setDraft] = useState("");
 
   const selfIdentity = getChatIdentity(profile, user);
@@ -886,6 +898,40 @@ function ChatView({
     };
   }, [supabase]);
 
+  async function loadDirectMessages(member: ChatManager) {
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setMessageError("Your session expired. Sign in again.");
+      return;
+    }
+
+    setMessagesLoading(true);
+    setMessageError("");
+
+    const response = await fetch(`/api/chat/direct?peerId=${encodeURIComponent(member.id)}`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    const payload = (await response.json()) as { error?: string; messages?: ApiDirectMessage[] };
+
+    setMessagesLoading(false);
+
+    if (!response.ok) {
+      setMessageError(payload.error ?? "Unable to load direct messages.");
+      return;
+    }
+
+    const messages = (payload.messages ?? []).map((message) => directMessageToChatMessage(message, member, selfIdentity));
+    setDmThreads((threads) =>
+      upsertDirectThread(threads, {
+        ...createEmptyDirectThread(member),
+        lastMessage: messages.at(-1)?.body ?? "Start a direct conversation",
+        messages
+      })
+    );
+  }
+
   function openDirectMessage(member: ChatManager) {
     const threadId = directThreadId(member.id);
     setChatMode("dm");
@@ -897,9 +943,10 @@ function ChatView({
 
       return [...threads, createEmptyDirectThread(member)];
     });
+    void loadDirectMessages(member);
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     const body = draft.trim();
     if (!body) {
       return;
@@ -918,26 +965,49 @@ function ChatView({
     if (chatMode === "league") {
       setLeagueMessages((messages) => [...messages, message]);
     } else if (activeDmThread) {
+      const recipient = activeManagers.find((manager) => directThreadId(manager.id) === activeDmThread.id);
+      if (!recipient) {
+        setMessageError("Select a real manager before sending.");
+        return;
+      }
+
+      const token = await getAccessToken(supabase);
+      if (!token) {
+        setMessageError("Your session expired. Sign in again.");
+        return;
+      }
+
+      setSendingMessage(true);
+      setMessageError("");
+
+      const response = await fetch("/api/chat/direct", {
+        body: JSON.stringify({
+          body,
+          recipientId: recipient.id
+        }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = (await response.json()) as { error?: string; message?: ApiDirectMessage };
+
+      setSendingMessage(false);
+
+      if (!response.ok || !payload.message) {
+        setMessageError(payload.error ?? "Unable to send direct message.");
+        return;
+      }
+
+      const savedMessage = directMessageToChatMessage(payload.message, recipient, selfIdentity);
       setDmThreads((threads) =>
-        threads.some((thread) => thread.id === activeDmThread.id)
-          ? threads.map((thread) =>
-              thread.id === activeDmThread.id
-                ? {
-                    ...thread,
-                    lastMessage: body,
-                    unreadCount: 0,
-                    messages: [...thread.messages, message]
-                  }
-                : thread
-            )
-          : [
-              ...threads,
-              {
-                ...activeDmThread,
-                lastMessage: body,
-                messages: [message]
-              }
-            ]
+        upsertDirectThread(threads, {
+          ...activeDmThread,
+          lastMessage: savedMessage.body,
+          messages: [...activeDmThread.messages.filter((existing) => existing.id !== savedMessage.id), savedMessage],
+          unreadCount: 0
+        })
       );
     }
 
@@ -989,7 +1059,7 @@ function ChatView({
             const preview = thread?.lastMessage || "Start a direct conversation";
             return (
               <button
-                className={chatMode === "dm" && activeDmThread?.manager === member.displayName ? "dm-thread active" : "dm-thread"}
+                className={chatMode === "dm" && selectedThreadId === directThreadId(member.id) ? "dm-thread active" : "dm-thread"}
                 key={member.id}
                 onClick={() => openDirectMessage(member)}
                 type="button"
@@ -1025,6 +1095,12 @@ function ChatView({
               <strong>No league messages yet</strong>
               <span>Start the real league chat with a waiver note, trade block, or matchup update.</span>
             </div>
+          ) : messagesLoading ? (
+            <div className="empty-dm-state">
+              <AtSign size={22} />
+              <strong>Loading conversation</strong>
+              <span>Getting the latest messages from Supabase.</span>
+            </div>
           ) : activeDmThread ? (
             <div className="empty-dm-state">
               <AtSign size={22} />
@@ -1040,11 +1116,13 @@ function ChatView({
           )}
         </div>
 
+        {messageError && <p className="form-message error">{messageError}</p>}
+
         <form
           className="message-composer"
           onSubmit={(event) => {
             event.preventDefault();
-            sendMessage();
+            void sendMessage();
           }}
         >
           <input
@@ -1053,7 +1131,7 @@ function ChatView({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
-          <button type="submit" aria-label="Send message" disabled={chatMode === "dm" && !activeDmThread}>
+          <button type="submit" aria-label="Send message" disabled={sendingMessage || (chatMode === "dm" && !activeDmThread)}>
             <Send size={18} />
           </button>
         </form>
@@ -1094,6 +1172,28 @@ function createEmptyDirectThread(member: ChatManager): DirectThread {
     presence: member.presence,
     team: member.team,
     unreadCount: 0
+  };
+}
+
+function upsertDirectThread(threads: DirectThread[], nextThread: DirectThread): DirectThread[] {
+  return threads.some((thread) => thread.id === nextThread.id)
+    ? threads.map((thread) => (thread.id === nextThread.id ? nextThread : thread))
+    : [...threads, nextThread];
+}
+
+function directMessageToChatMessage(
+  message: ApiDirectMessage,
+  peer: ChatManager,
+  selfIdentity: ReturnType<typeof getChatIdentity>
+): ChatMessage {
+  return {
+    body: message.body,
+    id: message.id,
+    initials: message.isSelf ? selfIdentity.initials : peer.initials,
+    isSelf: message.isSelf,
+    author: message.isSelf ? selfIdentity.manager : peer.displayName,
+    sentAt: formatChatTimestamp(message.createdAt),
+    team: message.isSelf ? selfIdentity.team : peer.team
   };
 }
 
@@ -2297,6 +2397,23 @@ function formatAdminDate(value?: string): string {
     month: "short",
     year: "numeric"
   }).format(new Date(value));
+}
+
+function formatChatTimestamp(value: string): string {
+  const date = new Date(value);
+  const now = new Date();
+
+  if (date.toDateString() === now.toDateString()) {
+    return new Intl.DateTimeFormat("en", {
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    day: "numeric",
+    month: "short"
+  }).format(date);
 }
 
 function formatAdminLeagues(memberships: AdminMembership[]): string {
