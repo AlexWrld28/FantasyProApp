@@ -40,9 +40,6 @@ import {
 import { baalLegacyCapabilities } from "@baal/football-data";
 import { StadiumMap } from "../components/StadiumMap";
 import {
-  directThreads as initialDirectThreads,
-  leagueChatMessages as initialLeagueChatMessages,
-  leagueMembers,
   leagueTeams,
   recentActivity,
   tradeTeams,
@@ -75,6 +72,17 @@ type TradeVote = {
   manager: string;
   team: string;
   vote: TradeVoteChoice;
+};
+
+type ChatManager = {
+  avatarUrl: string | null;
+  displayName: string;
+  email?: string;
+  id: string;
+  initials: string;
+  lastSignInAt?: string;
+  presence: Presence;
+  team: string;
 };
 
 type Profile = {
@@ -363,7 +371,7 @@ export default function HomePage() {
             setSelectedTeamId={setSelectedTeamId}
           />
         )}
-        {activeView === "chat" && <ChatView profile={profile} user={user} />}
+        {activeView === "chat" && <ChatView profile={profile} supabase={supabase} user={user} />}
         {activeView === "trade" && (
           <TradeBuilderView
             partnerTradeTeamId={partnerTradeTeamId}
@@ -804,28 +812,82 @@ function TradeBuilderView({
   );
 }
 
-function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
+function ChatView({
+  profile,
+  supabase,
+  user
+}: {
+  profile: Profile | null;
+  supabase: BrowserSupabaseClient;
+  user: User;
+}) {
   const [chatMode, setChatMode] = useState<ChatMode>("league");
-  const [leagueMessages, setLeagueMessages] = useState<ChatMessage[]>(initialLeagueChatMessages);
-  const [dmThreads, setDmThreads] = useState<DirectThread[]>(initialDirectThreads);
-  const [selectedThreadId, setSelectedThreadId] = useState(initialDirectThreads[0].id);
+  const [leagueMessages, setLeagueMessages] = useState<ChatMessage[]>([]);
+  const [dmThreads, setDmThreads] = useState<DirectThread[]>([]);
+  const [managers, setManagers] = useState<ChatManager[]>([]);
+  const [managersError, setManagersError] = useState("");
+  const [managersLoading, setManagersLoading] = useState(true);
+  const [selectedThreadId, setSelectedThreadId] = useState("");
   const [draft, setDraft] = useState("");
 
   const selfIdentity = getChatIdentity(profile, user);
-  const activeManagers = leagueMembers.filter((member) => !isSameManager(member.manager, selfIdentity.manager));
+  const activeManagers = managers.filter((member) => member.id !== user.id);
   const selectedThread = dmThreads.find((thread) => thread.id === selectedThreadId);
   const selectedMember =
-    activeManagers.find((member) => `dm-${managerSlug(member.manager)}` === selectedThreadId) ?? activeManagers[0];
-  const activeDmThread = selectedThread ?? createEmptyDirectThread(selectedMember);
-  const activeMessages = chatMode === "league" ? leagueMessages : activeDmThread.messages;
-  const activeTitle = chatMode === "league" ? "League Lobby" : activeDmThread.manager;
+    activeManagers.find((member) => directThreadId(member.id) === selectedThreadId) ?? activeManagers[0] ?? null;
+  const activeDmThread = selectedThread ?? (selectedMember ? createEmptyDirectThread(selectedMember) : null);
+  const activeMessages = chatMode === "league" ? leagueMessages : (activeDmThread?.messages ?? []);
+  const activeTitle = chatMode === "league" ? "League Lobby" : (activeDmThread?.manager ?? "Direct Messages");
   const activeSubtitle =
     chatMode === "league"
-      ? "League-wide trash talk, rulings, trades, and waiver chatter"
-      : `${activeDmThread.team} | ${activeDmThread.presence}`;
+      ? "League-wide trades, waivers, matchup notes, and commissioner updates"
+      : activeDmThread
+        ? `${activeDmThread.team} | ${activeDmThread.presence}`
+        : "Select a real league account to start a direct message";
 
-  function openDirectMessage(member: (typeof leagueMembers)[number]) {
-    const threadId = `dm-${managerSlug(member.manager)}`;
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadManagers() {
+      const token = await getAccessToken(supabase);
+      if (!token) {
+        if (isMounted) {
+          setManagersError("Your session expired. Sign in again.");
+          setManagersLoading(false);
+        }
+        return;
+      }
+
+      const response = await fetch("/api/users/managers", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const payload = (await response.json()) as { error?: string; managers?: ChatManager[] };
+
+      if (!isMounted) {
+        return;
+      }
+
+      setManagersLoading(false);
+
+      if (!response.ok) {
+        setManagersError(payload.error ?? "Unable to load real league users.");
+        return;
+      }
+
+      setManagers(payload.managers ?? []);
+    }
+
+    void loadManagers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase]);
+
+  function openDirectMessage(member: ChatManager) {
+    const threadId = directThreadId(member.id);
     setChatMode("dm");
     setSelectedThreadId(threadId);
     setDmThreads((threads) => {
@@ -855,18 +917,27 @@ function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
 
     if (chatMode === "league") {
       setLeagueMessages((messages) => [...messages, message]);
-    } else {
+    } else if (activeDmThread) {
       setDmThreads((threads) =>
-        threads.map((thread) =>
-          thread.id === activeDmThread.id
-            ? {
-                ...thread,
+        threads.some((thread) => thread.id === activeDmThread.id)
+          ? threads.map((thread) =>
+              thread.id === activeDmThread.id
+                ? {
+                    ...thread,
+                    lastMessage: body,
+                    unreadCount: 0,
+                    messages: [...thread.messages, message]
+                  }
+                : thread
+            )
+          : [
+              ...threads,
+              {
+                ...activeDmThread,
                 lastMessage: body,
-                unreadCount: 0,
-                messages: [...thread.messages, message]
+                messages: [message]
               }
-            : thread
-        )
+            ]
       );
     }
 
@@ -908,19 +979,24 @@ function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
 
         <div className="dm-thread-list" aria-label="Start or open direct message">
           <p className="dm-list-label">Active managers</p>
+          {managersLoading && <p className="dm-list-note">Loading real league users...</p>}
+          {managersError && <p className="dm-list-note error">{managersError}</p>}
+          {!managersLoading && !managersError && activeManagers.length === 0 && (
+            <p className="dm-list-note">No other real accounts have joined yet.</p>
+          )}
           {activeManagers.map((member) => {
-            const thread = dmThreads.find((candidate) => candidate.id === `dm-${managerSlug(member.manager)}`);
+            const thread = dmThreads.find((candidate) => candidate.id === directThreadId(member.id));
             const preview = thread?.lastMessage || "Start a direct conversation";
             return (
               <button
-                className={chatMode === "dm" && activeDmThread.manager === member.manager ? "dm-thread active" : "dm-thread"}
-                key={member.manager}
+                className={chatMode === "dm" && activeDmThread?.manager === member.displayName ? "dm-thread active" : "dm-thread"}
+                key={member.id}
                 onClick={() => openDirectMessage(member)}
                 type="button"
               >
                 <Avatar initials={member.initials} presence={member.presence} />
                 <span>
-                  <strong>{member.manager}</strong>
+                  <strong>{member.displayName}</strong>
                   <small>{preview}</small>
                 </span>
                 {thread && thread.unreadCount > 0 && <b>{thread.unreadCount}</b>}
@@ -943,11 +1019,23 @@ function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
         <div className="message-list" aria-label={`${activeTitle} messages`}>
           {activeMessages.length ? (
             activeMessages.map((message) => <MessageBubble key={message.id} message={message} />)
-          ) : (
+          ) : chatMode === "league" ? (
+            <div className="empty-dm-state">
+              <Hash size={22} />
+              <strong>No league messages yet</strong>
+              <span>Start the real league chat with a waiver note, trade block, or matchup update.</span>
+            </div>
+          ) : activeDmThread ? (
             <div className="empty-dm-state">
               <AtSign size={22} />
               <strong>Start a conversation with {activeDmThread.manager}</strong>
               <span>Send a trade idea, matchup note, or commissioner question directly.</span>
+            </div>
+          ) : (
+            <div className="empty-dm-state">
+              <AtSign size={22} />
+              <strong>No DM selected</strong>
+              <span>Select another real account from the active managers list.</span>
             </div>
           )}
         </div>
@@ -961,11 +1049,11 @@ function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
         >
           <input
             aria-label="Write a message"
-            placeholder={chatMode === "league" ? "Message the league" : `Message ${activeDmThread.manager}`}
+            placeholder={chatMode === "league" ? "Message the league" : activeDmThread ? `Message ${activeDmThread.manager}` : "Select a manager first"}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
-          <button type="submit" aria-label="Send message">
+          <button type="submit" aria-label="Send message" disabled={chatMode === "dm" && !activeDmThread}>
             <Send size={18} />
           </button>
         </form>
@@ -974,20 +1062,20 @@ function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
       <section className="section-panel member-panel">
         <PanelTitle icon={Users} title="Managers" />
         <div className="member-list">
-          {leagueMembers.map((member) => (
+          {managers.map((member) => (
             <button
-              className={isSameManager(member.manager, selfIdentity.manager) ? "member-row self-member" : "member-row"}
-              disabled={isSameManager(member.manager, selfIdentity.manager)}
-              key={member.manager}
+              className={member.id === user.id ? "member-row self-member" : "member-row"}
+              disabled={member.id === user.id}
+              key={member.id}
               onClick={() => openDirectMessage(member)}
               type="button"
             >
               <Avatar initials={member.initials} presence={member.presence} />
               <div>
-                <strong>{member.manager}</strong>
+                <strong>{member.displayName}</strong>
                 <span>{member.team}</span>
               </div>
-              {!isSameManager(member.manager, selfIdentity.manager) && <small>DM</small>}
+              {member.id !== user.id && <small>DM</small>}
             </button>
           ))}
         </div>
@@ -996,12 +1084,12 @@ function ChatView({ profile, user }: { profile: Profile | null; user: User }) {
   );
 }
 
-function createEmptyDirectThread(member: (typeof leagueMembers)[number]): DirectThread {
+function createEmptyDirectThread(member: ChatManager): DirectThread {
   return {
-    id: `dm-${managerSlug(member.manager)}`,
+    id: directThreadId(member.id),
     initials: member.initials,
     lastMessage: "Start a direct conversation",
-    manager: member.manager,
+    manager: member.displayName,
     messages: [],
     presence: member.presence,
     team: member.team,
@@ -1009,8 +1097,8 @@ function createEmptyDirectThread(member: (typeof leagueMembers)[number]): Direct
   };
 }
 
-function managerSlug(manager: string): string {
-  return manager.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+function directThreadId(userId: string): string {
+  return `dm-${userId}`;
 }
 
 function TradeAssetColumn({
@@ -2172,24 +2260,16 @@ function accountInitials(profile: Profile | null, user: User): string {
 }
 
 function getChatIdentity(profile: Profile | null, user: User) {
-  const displayName = profile?.display_name?.trim();
+  const metadataName = typeof user.user_metadata.display_name === "string" ? user.user_metadata.display_name.trim() : "";
+  const displayName = profile?.display_name?.trim() || metadataName;
   const emailName = user.email?.split("@")[0] ?? "Manager";
   const manager = displayName || emailName;
-  const matchedMember = leagueMembers.find((member) => isSameManager(member.manager, manager));
 
   return {
-    initials: matchedMember?.initials ?? accountInitials(profile, user),
-    manager: matchedMember?.manager ?? manager,
-    team: matchedMember?.team ?? "Free Agent Manager"
+    initials: accountInitials(profile, user),
+    manager,
+    team: "League Manager"
   };
-}
-
-function isSameManager(first: string, second: string): boolean {
-  return normalizeManagerName(first) === normalizeManagerName(second);
-}
-
-function normalizeManagerName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 async function getAccessToken(supabase: BrowserSupabaseClient): Promise<string | null> {

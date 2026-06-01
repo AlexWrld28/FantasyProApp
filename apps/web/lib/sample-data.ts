@@ -286,7 +286,6 @@ export const leagueMembers: Array<{
   presence: Presence;
 }> = [
   { manager: "Aazma", team: "Fourth Down Syndicate", initials: "AZ", presence: "online" },
-  { manager: "Aazmax123", team: "Commissioner Office", initials: "AX", presence: "online" },
   { manager: "Maya", team: "Red Zone Accountants", initials: "MY", presence: "online" },
   { manager: "Jordan", team: "Two Minute Drill", initials: "JD", presence: "away" },
   { manager: "Sam", team: "Waiver Wire Royalty", initials: "SM", presence: "offline" }

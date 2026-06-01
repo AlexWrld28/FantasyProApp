@@ -1128,6 +1128,23 @@ th {
   text-transform: uppercase;
 }
 
+.dm-list-note {
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0 0 8px;
+  padding: 10px;
+}
+
+.dm-list-note.error {
+  background: #fae9e6;
+  color: var(--coral);
+}
+
 .chat-window-panel {
   display: grid;
   grid-template-rows: auto minmax(360px, 1fr) auto;
