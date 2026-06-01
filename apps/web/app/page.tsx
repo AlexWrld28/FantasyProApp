@@ -366,7 +366,7 @@ export default function HomePage() {
       }
 
       let response: Response;
-      let payload: ({ error?: string } & Partial<RosterSnapshot>) | null = null;
+      let payload: ({ email?: string; error?: string; hint?: string } & Partial<RosterSnapshot>) | null = null;
 
       try {
         response = await fetch("/api/rosters", {
@@ -2687,7 +2687,7 @@ function RosterAdminView({ supabase }: { supabase: BrowserSupabaseClient }) {
       }
 
       let response: Response;
-      let payload: ({ error?: string } & Partial<RosterSnapshot>) | null = null;
+      let payload: ({ email?: string; error?: string; hint?: string } & Partial<RosterSnapshot>) | null = null;
 
       try {
         response = await fetch("/api/admin/rosters", {
@@ -2712,6 +2712,11 @@ function RosterAdminView({ supabase }: { supabase: BrowserSupabaseClient }) {
 
       if (response.status === 403) {
         setIsAdmin(false);
+        setAdminError(
+          payload?.email
+            ? `Admin access required for ${payload.email}. ${payload.hint ?? "Add that email to ADMIN_EMAILS in Vercel."}`
+            : payload?.error ?? "Admin access required."
+        );
         return;
       }
 
@@ -2802,7 +2807,7 @@ function RosterAdminView({ supabase }: { supabase: BrowserSupabaseClient }) {
       <div className="view-grid roster-admin-grid">
         <section className="section-panel roster-admin-panel">
           <PanelTitle icon={Shield} title="Roster Admin" />
-          <p className="empty-state">Admin access required.</p>
+          <p className="empty-state">{adminError || "Admin access required."}</p>
         </section>
       </div>
     );

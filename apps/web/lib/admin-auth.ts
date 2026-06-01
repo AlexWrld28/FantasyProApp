@@ -132,7 +132,14 @@ export async function getAdminContext(request: Request): Promise<AdminContext> {
 
   if (!adminEmails.has(user.email.toLowerCase())) {
     return {
-      error: Response.json({ error: "Admin access required." }, { status: 403 }),
+      error: Response.json(
+        {
+          email: user.email,
+          error: "Admin access required.",
+          hint: "Add this email to ADMIN_EMAILS in Vercel and redeploy."
+        },
+        { status: 403 }
+      ),
       supabase: null,
       user: null
     };
