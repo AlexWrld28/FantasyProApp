@@ -8,6 +8,8 @@ import {
   CalendarClock,
   Check,
   ClipboardList,
+  Eye,
+  EyeOff,
   Gauge,
   Hash,
   Home,
@@ -527,11 +529,11 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
 
           <label className="form-field">
             <span>Password</span>
-            <input
+            <PasswordInput
               autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
+              label="Password"
               minLength={6}
               required
-              type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
@@ -1516,10 +1518,10 @@ function SettingsView({
           </label>
           <label className="form-field">
             <span>New password</span>
-            <input
+            <PasswordInput
               autoComplete="new-password"
+              label="New password"
               minLength={6}
-              type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
@@ -1717,10 +1719,10 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
             <div className="admin-password-row">
               <label className="form-field">
                 <span>Set new password</span>
-                <input
+                <PasswordInput
                   autoComplete="new-password"
+                  label={`Set password for ${managedUser.email || managedUser.profile?.display_name || managedUser.id}`}
                   minLength={6}
-                  type="password"
                   value={passwordsByUser[managedUser.id] ?? ""}
                   onChange={(event) =>
                     setPasswordsByUser((current) => ({
@@ -1865,6 +1867,46 @@ function AdminDetail({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function PasswordInput({
+  autoComplete,
+  label,
+  minLength,
+  onChange,
+  required,
+  value
+}: {
+  autoComplete: string;
+  label: string;
+  minLength?: number;
+  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  required?: boolean;
+  value: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  const Icon = visible ? EyeOff : Eye;
+
+  return (
+    <span className="password-input-wrap">
+      <input
+        aria-label={label}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        required={required}
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+      />
+      <button
+        aria-label={visible ? "Hide password" : "Show password"}
+        onClick={() => setVisible((current) => !current)}
+        type="button"
+      >
+        <Icon size={17} />
+      </button>
+    </span>
   );
 }
 
