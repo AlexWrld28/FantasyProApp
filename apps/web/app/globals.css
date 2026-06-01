@@ -1444,7 +1444,8 @@ th {
 }
 
 .decision-panel,
-.analytics-panel {
+.analytics-panel,
+.trade-vote-panel {
   display: grid;
   gap: 14px;
 }
@@ -1513,6 +1514,151 @@ th {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.trade-vote-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.trade-vote-panel::before {
+  background: linear-gradient(90deg, var(--green), var(--gold), var(--coral));
+  content: "";
+  height: 4px;
+  inset: 0 0 auto;
+  position: absolute;
+}
+
+.vote-scoreboard {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vote-scoreboard div {
+  background:
+    radial-gradient(circle at 80% 18%, rgba(255, 255, 255, 0.2), transparent 8rem),
+    linear-gradient(135deg, var(--navy), #22344a);
+  border-radius: 8px;
+  color: #fff;
+  display: grid;
+  gap: 4px;
+  min-height: 112px;
+  padding: 16px;
+}
+
+.vote-scoreboard span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.vote-scoreboard strong {
+  font-size: 52px;
+  line-height: 1;
+}
+
+.vote-result-banner {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+
+.trade-vote-panel.approved .vote-result-banner {
+  background: #e5f4eb;
+  color: var(--green);
+}
+
+.trade-vote-panel.vetoed .vote-result-banner {
+  background: #fae9e6;
+  color: var(--coral);
+}
+
+.trade-vote-panel.tied .vote-result-banner {
+  background: #fff6df;
+  color: #92640f;
+}
+
+.vote-result-banner span {
+  font-size: 12px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.vote-result-banner strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.vote-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vote-actions button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-weight: 1000;
+  min-height: 46px;
+}
+
+.vote-actions .approve {
+  background: #eef8f1;
+  color: var(--green);
+}
+
+.vote-actions .veto {
+  background: #fff0ed;
+  color: var(--coral);
+}
+
+.vote-actions button.selected {
+  box-shadow: inset 0 0 0 3px currentColor;
+}
+
+.vote-ledger {
+  display: grid;
+  gap: 8px;
+}
+
+.vote-ledger-row {
+  align-items: center;
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.vote-ledger-row span {
+  display: grid;
+  gap: 2px;
+}
+
+.vote-ledger-row small {
+  color: var(--muted);
+}
+
+.vote-ledger-row b {
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.vote-ledger-row b.approve {
+  background: #e5f4eb;
+  color: var(--green);
+}
+
+.vote-ledger-row b.veto {
+  background: #fae9e6;
+  color: var(--coral);
 }
 
 .ai-verdict {

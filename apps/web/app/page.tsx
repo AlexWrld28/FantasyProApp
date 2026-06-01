@@ -60,12 +60,19 @@ import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
 type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "trade" | "map" | "settings";
 type ChatMode = "league" | "dm";
 type TradeMode = "win-now" | "balanced" | "keeper";
+type TradeVoteChoice = "approve" | "veto";
 
 type TradePreferences = {
   mode: TradeMode;
   riskTolerance: number;
   keeperWeight: number;
   needWeight: number;
+};
+
+type TradeVote = {
+  manager: string;
+  team: string;
+  vote: TradeVoteChoice;
 };
 
 type Profile = {
@@ -590,6 +597,11 @@ function TradeBuilderView({
     keeperWeight: 38,
     needWeight: 72
   });
+  const [tradeVotes, setTradeVotes] = useState<TradeVote[]>([
+    { manager: "Maya", team: "North End Zone", vote: "approve" },
+    { manager: "Jordan", team: "Option Route", vote: "veto" },
+    { manager: "Sam", team: "Nickel Blitz", vote: "approve" }
+  ]);
 
   const yourTeam = tradeTeams.find((team) => team.id === yourTradeTeamId) ?? tradeTeams[0];
   const partnerTeam =
@@ -599,6 +611,8 @@ function TradeBuilderView({
   const outgoingAssets = yourTeam.assets.filter((asset) => outgoingIds.includes(asset.id));
   const incomingAssets = partnerTeam.assets.filter((asset) => incomingIds.includes(asset.id));
   const analysis = analyzeTrade(outgoingAssets, incomingAssets, yourTeam, partnerTeam, preferences);
+  const voteSummary = summarizeTradeVotes(tradeVotes);
+  const yourVote = tradeVotes.find((vote) => vote.manager === yourTeam.manager)?.vote;
 
   function updateYourTeam(teamId: string) {
     setYourTradeTeamId(teamId);
@@ -615,6 +629,17 @@ function TradeBuilderView({
     setPartnerTradeTeamId(teamId);
     const nextTeam = tradeTeams.find((team) => team.id === teamId) ?? tradeTeams[1];
     setIncomingIds(nextTeam.assets.slice(0, 1).map((asset) => asset.id));
+  }
+
+  function castTradeVote(vote: TradeVoteChoice) {
+    setTradeVotes((votes) => {
+      const existingVote = votes.find((entry) => entry.manager === yourTeam.manager);
+      if (existingVote) {
+        return votes.map((entry) => (entry.manager === yourTeam.manager ? { ...entry, team: yourTeam.name, vote } : entry));
+      }
+
+      return [...votes, { manager: yourTeam.manager, team: yourTeam.name, vote }];
+    });
   }
 
   return (
@@ -724,6 +749,51 @@ function TradeBuilderView({
             <div className="insight-row" key={insight}>
               <Check size={15} />
               <span>{insight}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className={`section-panel trade-vote-panel ${voteSummary.result}`}>
+        <PanelTitle icon={Shield} title="League Trade Vote" />
+        <div className="vote-scoreboard">
+          <div>
+            <span>Push through</span>
+            <strong>{voteSummary.approveVotes}</strong>
+          </div>
+          <div>
+            <span>Veto</span>
+            <strong>{voteSummary.vetoVotes}</strong>
+          </div>
+        </div>
+        <div className="vote-result-banner">
+          <span>{tradeVoteResultLabel(voteSummary.result)}</span>
+          <strong>{tradeVoteResultDetail(voteSummary.result)}</strong>
+        </div>
+        <div className="vote-actions">
+          <button
+            className={yourVote === "approve" ? "selected approve" : "approve"}
+            onClick={() => castTradeVote("approve")}
+            type="button"
+          >
+            Push trade through
+          </button>
+          <button
+            className={yourVote === "veto" ? "selected veto" : "veto"}
+            onClick={() => castTradeVote("veto")}
+            type="button"
+          >
+            Veto trade
+          </button>
+        </div>
+        <div className="vote-ledger">
+          {tradeVotes.map((vote) => (
+            <div className="vote-ledger-row" key={vote.manager}>
+              <span>
+                <strong>{vote.manager}</strong>
+                <small>{vote.team}</small>
+              </span>
+              <b className={vote.vote}>{vote.vote === "approve" ? "Push" : "Veto"}</b>
             </div>
           ))}
         </div>
@@ -1957,6 +2027,40 @@ function tradeModeLabel(mode: TradeMode): string {
       return "Balanced";
     default:
       return "Win Now";
+  }
+}
+
+function summarizeTradeVotes(votes: TradeVote[]) {
+  const approveVotes = votes.filter((vote) => vote.vote === "approve").length;
+  const vetoVotes = votes.filter((vote) => vote.vote === "veto").length;
+  const result = approveVotes > vetoVotes ? "approved" : vetoVotes > approveVotes ? "vetoed" : "tied";
+
+  return {
+    approveVotes,
+    result,
+    vetoVotes
+  };
+}
+
+function tradeVoteResultLabel(result: string): string {
+  switch (result) {
+    case "approved":
+      return "Majority push through";
+    case "vetoed":
+      return "Majority veto";
+    default:
+      return "Vote tied";
+  }
+}
+
+function tradeVoteResultDetail(result: string): string {
+  switch (result) {
+    case "approved":
+      return "If voting closed now, this trade would process.";
+    case "vetoed":
+      return "If voting closed now, this trade would be blocked.";
+    default:
+      return "One more vote can swing the election.";
   }
 }
 
