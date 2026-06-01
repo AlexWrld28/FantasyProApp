@@ -64,14 +64,19 @@ export async function PATCH(request: Request) {
     }
 
     const nextFaab = team.faabRemaining - faabBid;
-    const { error: faabError } = await context.supabase
+    const { data: updatedTeams, error: faabError } = await context.supabase
       .from("teams")
       .update({ faab_remaining: nextFaab, updated_at: new Date().toISOString() })
       .eq("id", team.id)
-      .gte("faab_remaining", faabBid);
+      .gte("faab_remaining", faabBid)
+      .select("id");
 
     if (faabError) {
       return Response.json({ error: faabError.message }, { status: 500 });
+    }
+
+    if (!updatedTeams?.length) {
+      return Response.json({ error: "You do not have enough FAAB for that bid." }, { status: 400 });
     }
 
     const { error } = await context.supabase.from("team_players").insert({

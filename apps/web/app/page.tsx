@@ -365,10 +365,21 @@ export default function HomePage() {
         setRosterError("");
       }
 
-      const response = await fetch("/api/rosters", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+      let response: Response;
+      let payload: ({ error?: string } & Partial<RosterSnapshot>) | null = null;
+
+      try {
+        response = await fetch("/api/rosters", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        payload = await readJsonResponse(response);
+      } catch (error) {
+        if (isMounted) {
+          setRosterLoading(false);
+          setRosterError(error instanceof Error ? error.message : "Unable to load real rosters.");
+        }
+        return;
+      }
 
       if (!isMounted) {
         return;
@@ -376,8 +387,8 @@ export default function HomePage() {
 
       setRosterLoading(false);
 
-      if (!response.ok || !payload.teams) {
-        setRosterError(payload.error ?? "Unable to load real rosters.");
+      if (!response.ok || !payload?.teams) {
+        setRosterError(payload?.error ?? "Unable to load real rosters.");
         return;
       }
 
@@ -2181,25 +2192,34 @@ function FreeAgencyView({
     setAcquisitionStatus("");
     setRosterError("");
 
-    const response = await fetch("/api/rosters", {
-      body: JSON.stringify({
-        action: "claim",
-        faabBid,
-        playerId,
-        rosterSlot: "BN"
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      method: "PATCH"
-    });
-    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+    let response: Response;
+    let payload: ({ error?: string } & Partial<RosterSnapshot>) | null = null;
+
+    try {
+      response = await fetch("/api/rosters", {
+        body: JSON.stringify({
+          action: "claim",
+          faabBid,
+          playerId,
+          rosterSlot: "BN"
+        }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        method: "PATCH"
+      });
+      payload = await readJsonResponse(response);
+    } catch (error) {
+      setAcquiringPlayerId(null);
+      setRosterError(error instanceof Error ? error.message : "Unable to acquire player.");
+      return;
+    }
 
     setAcquiringPlayerId(null);
 
-    if (!response.ok || !payload.teams) {
-      setRosterError(payload.error ?? "Unable to acquire player.");
+    if (!response.ok || !payload?.teams) {
+      setRosterError(payload?.error ?? "Unable to acquire player.");
       return;
     }
 
@@ -2666,11 +2686,23 @@ function RosterAdminView({ supabase }: { supabase: BrowserSupabaseClient }) {
         return;
       }
 
-      const response = await fetch("/api/admin/rosters", {
-        headers: {
-          Authorization: `Bearer ${token}`
+      let response: Response;
+      let payload: ({ error?: string } & Partial<RosterSnapshot>) | null = null;
+
+      try {
+        response = await fetch("/api/admin/rosters", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        payload = await readJsonResponse(response);
+      } catch (error) {
+        if (isMounted) {
+          setLoadingAdmin(false);
+          setAdminError(error instanceof Error ? error.message : "Unable to load roster admin.");
         }
-      });
+        return;
+      }
 
       if (!isMounted) {
         return;
@@ -2683,9 +2715,8 @@ function RosterAdminView({ supabase }: { supabase: BrowserSupabaseClient }) {
         return;
       }
 
-      const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
-      if (!response.ok || !payload.teams) {
-        setAdminError(payload.error ?? "Unable to load roster admin.");
+      if (!response.ok || !payload?.teams) {
+        setAdminError(payload?.error ?? "Unable to load roster admin.");
         return;
       }
 
@@ -2711,24 +2742,33 @@ function RosterAdminView({ supabase }: { supabase: BrowserSupabaseClient }) {
     setAdminError("");
     setAdminStatus("");
 
-    const response = await fetch("/api/admin/rosters", {
-      body: JSON.stringify({
-        managerId,
-        playerId,
-        rosterSlot
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      method: "PATCH"
-    });
-    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+    let response: Response;
+    let payload: ({ error?: string } & Partial<RosterSnapshot>) | null = null;
+
+    try {
+      response = await fetch("/api/admin/rosters", {
+        body: JSON.stringify({
+          managerId,
+          playerId,
+          rosterSlot
+        }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        method: "PATCH"
+      });
+      payload = await readJsonResponse(response);
+    } catch (error) {
+      setMovingPlayerId(null);
+      setAdminError(error instanceof Error ? error.message : "Unable to update roster assignment.");
+      return;
+    }
 
     setMovingPlayerId(null);
 
-    if (!response.ok || !payload.teams) {
-      setAdminError(payload.error ?? "Unable to update roster assignment.");
+    if (!response.ok || !payload?.teams) {
+      setAdminError(payload?.error ?? "Unable to update roster assignment.");
       return;
     }
 
@@ -3382,6 +3422,19 @@ function getChatIdentity(profile: Profile | null, user: User) {
 async function getAccessToken(supabase: BrowserSupabaseClient): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text) {
+    return {} as T;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(response.ok ? "Server returned an unreadable response." : "Server failed to load.");
+  }
 }
 
 function adminUserInitials(user: AdminUser): string {
