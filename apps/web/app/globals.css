@@ -435,8 +435,9 @@ button:disabled {
   border-radius: 8px;
   box-shadow: var(--stadium-glow);
   color: #fff;
-  display: flex;
-  gap: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
   min-height: 46px;
   overflow: hidden;
   padding: 0 14px;
@@ -450,14 +451,22 @@ button:disabled {
   font-size: 11px;
   font-weight: 1000;
   padding: 5px 10px;
+  position: relative;
   text-transform: uppercase;
+  z-index: 1;
+}
+
+.ticker-viewport {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .ticker-track {
-  animation: tickerMove 24s linear infinite;
+  animation: tickerMove 34s linear infinite;
   display: flex;
   gap: 28px;
   min-width: max-content;
+  padding-left: 100%;
 }
 
 .ticker-track span {

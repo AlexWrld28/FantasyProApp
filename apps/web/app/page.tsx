@@ -549,19 +549,23 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
 
 function SportsTicker() {
   const tickerItems = [
-    "Waivers lock in 18m",
-    "Trade AI found 2 leverage spots",
-    "Fourth Down Syndicate projected +8.4",
-    "Live scoring sync healthy"
+    "League update: Waivers lock in 18m",
+    "League update: Trade review window closes tonight",
+    "League update: Fourth Down Syndicate projected +8.4",
+    "Player stat: Bijan Robinson 112 rush yds and 2 TD",
+    "Player stat: CeeDee Lamb 9 catches for 138 yds",
+    "Player stat: Josh Allen 31.6 fantasy points"
   ];
 
   return (
     <section className="sports-ticker" aria-label="League ticker">
       <span className="ticker-label">HQ Wire</span>
-      <div className="ticker-track">
-        {[...tickerItems, ...tickerItems].map((item, index) => (
-          <span key={`${item}-${index}`}>{item}</span>
-        ))}
+      <div className="ticker-viewport">
+        <div className="ticker-track">
+          {[...tickerItems, ...tickerItems].map((item, index) => (
+            <span key={`${item}-${index}`}>{item}</span>
+          ))}
+        </div>
       </div>
     </section>
   );
