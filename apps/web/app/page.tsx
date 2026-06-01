@@ -94,6 +94,20 @@ type ApiDirectMessage = {
   senderId: string;
 };
 
+type UserTradeProposal = {
+  aiFairnessScore: number | null;
+  aiNetEdge: number | null;
+  createdAt: string;
+  id: string;
+  incomingAssets: Array<{ label: string; value?: number }>;
+  note: string | null;
+  outgoingAssets: Array<{ label: string; value?: number }>;
+  recipientId: string;
+  senderId: string;
+  status: string;
+  updatedAt: string;
+};
+
 type Profile = {
   avatar_url: string | null;
   display_name: string;
@@ -384,8 +398,10 @@ export default function HomePage() {
         {activeView === "trade" && (
           <TradeBuilderView
             partnerTradeTeamId={partnerTradeTeamId}
+            supabase={supabase}
             setPartnerTradeTeamId={setPartnerTradeTeamId}
             setYourTradeTeamId={setYourTradeTeamId}
+            user={user}
             yourTradeTeamId={yourTradeTeamId}
           />
         )}
@@ -599,13 +615,17 @@ function SportsTicker() {
 
 function TradeBuilderView({
   partnerTradeTeamId,
+  supabase,
   setPartnerTradeTeamId,
   setYourTradeTeamId,
+  user,
   yourTradeTeamId
 }: {
   partnerTradeTeamId: string;
+  supabase: BrowserSupabaseClient;
   setPartnerTradeTeamId: (teamId: string) => void;
   setYourTradeTeamId: (teamId: string) => void;
+  user: User;
   yourTradeTeamId: string;
 }) {
   const [outgoingIds, setOutgoingIds] = useState<string[]>(["trade-p-4", "trade-p-5"]);
@@ -621,6 +641,13 @@ function TradeBuilderView({
     { manager: "Jordan", team: "Option Route", vote: "veto" },
     { manager: "Sam", team: "Nickel Blitz", vote: "approve" }
   ]);
+  const [tradeManagers, setTradeManagers] = useState<ChatManager[]>([]);
+  const [selectedRecipientId, setSelectedRecipientId] = useState("");
+  const [tradeProposals, setTradeProposals] = useState<UserTradeProposal[]>([]);
+  const [tradeWorkflowError, setTradeWorkflowError] = useState("");
+  const [tradeWorkflowStatus, setTradeWorkflowStatus] = useState("");
+  const [tradeWorkflowLoading, setTradeWorkflowLoading] = useState(true);
+  const [sendingProposal, setSendingProposal] = useState(false);
 
   const yourTeam = tradeTeams.find((team) => team.id === yourTradeTeamId) ?? tradeTeams[0];
   const partnerTeam =
@@ -632,6 +659,61 @@ function TradeBuilderView({
   const analysis = analyzeTrade(outgoingAssets, incomingAssets, yourTeam, partnerTeam, preferences);
   const voteSummary = summarizeTradeVotes(tradeVotes);
   const yourVote = tradeVotes.find((vote) => vote.manager === yourTeam.manager)?.vote;
+  const realTradePartners = tradeManagers.filter((manager) => manager.id !== user.id);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTradeWorkflow() {
+      const token = await getAccessToken(supabase);
+      if (!token) {
+        if (isMounted) {
+          setTradeWorkflowError("Your session expired. Sign in again.");
+          setTradeWorkflowLoading(false);
+        }
+        return;
+      }
+
+      const [managerResponse, proposalResponse] = await Promise.all([
+        fetch("/api/users/managers", {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        fetch("/api/trades/proposals", {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+      const managerPayload = (await managerResponse.json()) as { error?: string; managers?: ChatManager[] };
+      const proposalPayload = (await proposalResponse.json()) as { error?: string; proposals?: UserTradeProposal[] };
+
+      if (!isMounted) {
+        return;
+      }
+
+      setTradeWorkflowLoading(false);
+
+      if (!managerResponse.ok) {
+        setTradeWorkflowError(managerPayload.error ?? "Unable to load real trade partners.");
+        return;
+      }
+
+      if (!proposalResponse.ok) {
+        setTradeWorkflowError(proposalPayload.error ?? "Unable to load trade proposals.");
+        return;
+      }
+
+      const nextManagers = managerPayload.managers ?? [];
+      const nextPartners = nextManagers.filter((manager) => manager.id !== user.id);
+      setTradeManagers(nextManagers);
+      setSelectedRecipientId((current) => current || nextPartners[0]?.id || "");
+      setTradeProposals(proposalPayload.proposals ?? []);
+    }
+
+    void loadTradeWorkflow();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase, user.id]);
 
   function updateYourTeam(teamId: string) {
     setYourTradeTeamId(teamId);
@@ -661,6 +743,81 @@ function TradeBuilderView({
     });
   }
 
+  async function sendTradeProposal() {
+    if (!selectedRecipientId) {
+      setTradeWorkflowError("Select a real trade partner first.");
+      return;
+    }
+
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setTradeWorkflowError("Your session expired. Sign in again.");
+      return;
+    }
+
+    setSendingProposal(true);
+    setTradeWorkflowError("");
+    setTradeWorkflowStatus("");
+
+    const response = await fetch("/api/trades/proposals", {
+      body: JSON.stringify({
+        aiFairnessScore: analysis.fairnessScore,
+        aiNetEdge: analysis.netEdge,
+        incomingAssets: incomingAssets.map(tradeAssetToPayload),
+        note: analysis.verdict,
+        outgoingAssets: outgoingAssets.map(tradeAssetToPayload),
+        recipientId: selectedRecipientId
+      }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "POST"
+    });
+    const payload = (await response.json()) as { error?: string; proposal?: UserTradeProposal };
+
+    setSendingProposal(false);
+
+    if (!response.ok || !payload.proposal) {
+      setTradeWorkflowError(payload.error ?? "Unable to send trade proposal.");
+      return;
+    }
+
+    setTradeProposals((proposals) => [payload.proposal!, ...proposals]);
+    setTradeWorkflowStatus("Trade proposal sent.");
+  }
+
+  async function updateTradeProposalStatus(proposalId: string, status: "accepted" | "declined" | "voting") {
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setTradeWorkflowError("Your session expired. Sign in again.");
+      return;
+    }
+
+    setTradeWorkflowError("");
+    setTradeWorkflowStatus("");
+
+    const response = await fetch(`/api/trades/proposals/${proposalId}`, {
+      body: JSON.stringify({ status }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "PATCH"
+    });
+    const payload = (await response.json()) as { error?: string; proposal?: UserTradeProposal };
+
+    if (!response.ok || !payload.proposal) {
+      setTradeWorkflowError(payload.error ?? "Unable to update trade proposal.");
+      return;
+    }
+
+    setTradeProposals((proposals) =>
+      proposals.map((proposal) => (proposal.id === proposalId ? payload.proposal! : proposal))
+    );
+    setTradeWorkflowStatus(`Trade proposal ${status}.`);
+  }
+
   return (
     <div className="view-grid trade-grid">
       <section className="section-panel trade-builder-panel">
@@ -686,6 +843,24 @@ function TradeBuilderView({
                     {team.name}
                   </option>
                 ))}
+            </select>
+          </label>
+          <label>
+            <span>Send proposal to</span>
+            <select
+              value={selectedRecipientId}
+              onChange={(event) => setSelectedRecipientId(event.target.value)}
+              disabled={!realTradePartners.length}
+            >
+              {realTradePartners.length ? (
+                realTradePartners.map((manager) => (
+                  <option key={manager.id} value={manager.id}>
+                    {manager.displayName}
+                  </option>
+                ))
+              ) : (
+                <option value="">No real users available</option>
+              )}
             </select>
           </label>
         </div>
@@ -714,7 +889,30 @@ function TradeBuilderView({
             toggleAsset={(assetId) => setIncomingIds((ids) => toggleId(ids, assetId))}
           />
         </div>
+        <div className="trade-submit-row">
+          <div>
+            <strong>Ready to white-box test?</strong>
+            <span>Send this package to a real account, then accept or decline it from the other login.</span>
+          </div>
+          <button
+            className="primary-action"
+            disabled={sendingProposal || !selectedRecipientId || tradeWorkflowLoading}
+            onClick={() => void sendTradeProposal()}
+            type="button"
+          >
+            {sendingProposal ? "Sending..." : "Propose trade"}
+          </button>
+        </div>
+        {tradeWorkflowError && <p className="form-message error">{tradeWorkflowError}</p>}
+        {tradeWorkflowStatus && <p className="form-message success">{tradeWorkflowStatus}</p>}
       </section>
+
+      <TradeProposalInbox
+        managers={tradeManagers}
+        proposals={tradeProposals}
+        updateProposalStatus={updateTradeProposalStatus}
+        userId={user.id}
+      />
 
       <section className="section-panel decision-panel">
         <PanelTitle icon={BrainCircuit} title="AI Decision Lab" />
@@ -1173,6 +1371,123 @@ function createEmptyDirectThread(member: ChatManager): DirectThread {
     team: member.team,
     unreadCount: 0
   };
+}
+
+function TradeProposalInbox({
+  managers,
+  proposals,
+  updateProposalStatus,
+  userId
+}: {
+  managers: ChatManager[];
+  proposals: UserTradeProposal[];
+  updateProposalStatus: (proposalId: string, status: "accepted" | "declined" | "voting") => Promise<void>;
+  userId: string;
+}) {
+  const incoming = proposals.filter((proposal) => proposal.recipientId === userId);
+  const outgoing = proposals.filter((proposal) => proposal.senderId === userId);
+
+  return (
+    <section className="section-panel trade-proposals-panel">
+      <PanelTitle icon={ClipboardList} title="Trade Proposals" />
+      <div className="proposal-columns">
+        <ProposalColumn
+          emptyText="No incoming proposals yet."
+          managers={managers}
+          proposals={incoming}
+          title="Incoming"
+          updateProposalStatus={updateProposalStatus}
+          userId={userId}
+        />
+        <ProposalColumn
+          emptyText="No outgoing proposals yet."
+          managers={managers}
+          proposals={outgoing}
+          title="Outgoing"
+          updateProposalStatus={updateProposalStatus}
+          userId={userId}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ProposalColumn({
+  emptyText,
+  managers,
+  proposals,
+  title,
+  updateProposalStatus,
+  userId
+}: {
+  emptyText: string;
+  managers: ChatManager[];
+  proposals: UserTradeProposal[];
+  title: string;
+  updateProposalStatus: (proposalId: string, status: "accepted" | "declined" | "voting") => Promise<void>;
+  userId: string;
+}) {
+  return (
+    <div className="proposal-column">
+      <h4>{title}</h4>
+      {proposals.length ? (
+        proposals.map((proposal) => {
+          const isIncoming = proposal.recipientId === userId;
+          const counterpart = managers.find((manager) => manager.id === (isIncoming ? proposal.senderId : proposal.recipientId));
+
+          return (
+            <article className="proposal-card" key={proposal.id}>
+              <div className="proposal-card-header">
+                <span>{isIncoming ? "From" : "To"} {counterpart?.displayName ?? "Unknown manager"}</span>
+                <b className={`proposal-status ${proposal.status}`}>{proposal.status}</b>
+              </div>
+              <div className="proposal-assets-grid">
+                <ProposalAssets title={isIncoming ? "They send" : "You send"} assets={proposal.outgoingAssets} />
+                <ProposalAssets title={isIncoming ? "You send" : "They send"} assets={proposal.incomingAssets} />
+              </div>
+              <div className="proposal-card-footer">
+                <Metric label="Fairness" value={proposal.aiFairnessScore?.toString() ?? "N/A"} />
+                <Metric label="Net edge" value={proposal.aiNetEdge == null ? "N/A" : signedNumber(proposal.aiNetEdge)} />
+              </div>
+              {isIncoming && proposal.status === "sent" && (
+                <div className="proposal-actions">
+                  <button className="approve" onClick={() => void updateProposalStatus(proposal.id, "accepted")} type="button">
+                    Accept
+                  </button>
+                  <button className="veto" onClick={() => void updateProposalStatus(proposal.id, "declined")} type="button">
+                    Decline
+                  </button>
+                  <button onClick={() => void updateProposalStatus(proposal.id, "voting")} type="button">
+                    Send to vote
+                  </button>
+                </div>
+              )}
+            </article>
+          );
+        })
+      ) : (
+        <p className="proposal-empty">{emptyText}</p>
+      )}
+    </div>
+  );
+}
+
+function ProposalAssets({ assets, title }: { assets: Array<{ label: string; value?: number }>; title: string }) {
+  return (
+    <div className="proposal-assets">
+      <span>{title}</span>
+      {assets.length ? (
+        assets.map((asset) => (
+          <strong key={asset.label}>
+            {asset.label}
+            {asset.value ? <small>{asset.value}</small> : null}
+          </strong>
+        ))
+      ) : (
+        <em>No assets selected</em>
+      )}
+    </div>
+  );
 }
 
 function upsertDirectThread(threads: DirectThread[], nextThread: DirectThread): DirectThread[] {
@@ -2309,6 +2624,13 @@ function tradeModeLabel(mode: TradeMode): string {
     default:
       return "Win Now";
   }
+}
+
+function tradeAssetToPayload(asset: TradeAsset) {
+  return {
+    label: asset.name,
+    value: asset.tradeValue
+  };
 }
 
 function summarizeTradeVotes(votes: TradeVote[]) {

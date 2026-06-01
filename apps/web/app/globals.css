@@ -1374,10 +1374,14 @@ th {
   grid-column: 1 / -1;
 }
 
+.trade-proposals-panel {
+  grid-column: 1 / -1;
+}
+
 .trade-team-selectors {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 16px;
 }
 
@@ -1406,6 +1410,163 @@ th {
   display: grid;
   gap: 14px;
   grid-template-columns: minmax(0, 1fr) 176px minmax(0, 1fr);
+}
+
+.trade-submit-row {
+  align-items: center;
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.trade-submit-row div {
+  display: grid;
+  gap: 3px;
+}
+
+.trade-submit-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.proposal-columns {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proposal-column {
+  display: grid;
+  gap: 10px;
+}
+
+.proposal-column h4 {
+  font-size: 13px;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.proposal-card,
+.proposal-empty {
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.proposal-card {
+  display: grid;
+  gap: 12px;
+}
+
+.proposal-card-header,
+.proposal-card-footer {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.proposal-card-header span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.proposal-status {
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+
+.proposal-status.sent,
+.proposal-status.voting {
+  background: #fff6df;
+  color: #92640f;
+}
+
+.proposal-status.accepted,
+.proposal-status.approved {
+  background: #e5f4eb;
+  color: var(--green);
+}
+
+.proposal-status.declined,
+.proposal-status.vetoed {
+  background: #fae9e6;
+  color: var(--coral);
+}
+
+.proposal-assets-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.proposal-assets {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.proposal-assets > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 1000;
+  text-transform: uppercase;
+}
+
+.proposal-assets strong {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+}
+
+.proposal-assets small {
+  color: var(--green);
+}
+
+.proposal-assets em,
+.proposal-empty {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.proposal-actions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.proposal-actions button {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 900;
+  min-height: 38px;
+}
+
+.proposal-actions .approve {
+  background: #e5f4eb;
+  color: var(--green);
+}
+
+.proposal-actions .veto {
+  background: #fae9e6;
+  color: var(--coral);
 }
 
 .trade-asset-column {
@@ -2216,8 +2377,16 @@ th {
   }
 
   .trade-team-selectors,
-  .trade-grade-row {
+  .trade-grade-row,
+  .proposal-columns,
+  .proposal-assets-grid,
+  .proposal-actions {
     grid-template-columns: 1fr;
+  }
+
+  .trade-submit-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .stadium-map-header {
