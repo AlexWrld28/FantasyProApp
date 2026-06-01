@@ -40,17 +40,6 @@ import {
 import { baalLegacyCapabilities } from "@baal/football-data";
 import { StadiumMap } from "../components/StadiumMap";
 import {
-  leagueTeams,
-  recentActivity,
-  tradeTeams,
-  waiverTargets,
-  type ChatMessage,
-  type DirectThread,
-  type Presence,
-  type TradeAsset,
-  type TradeTeam
-} from "../lib/sample-data";
-import {
   createRuntimeBrowserSupabaseClient,
   type BrowserSupabaseClient
 } from "../lib/supabase";
@@ -60,6 +49,64 @@ type ViewKey = "dashboard" | "scoring" | "rosters" | "chat" | "trade" | "map" | 
 type ChatMode = "league" | "dm";
 type TradeMode = "win-now" | "balanced" | "keeper";
 type TradeVoteChoice = "approve" | "veto";
+type Presence = "online" | "away" | "offline";
+
+type ChatMessage = {
+  author: string;
+  body: string;
+  id: string;
+  initials: string;
+  isSelf?: boolean;
+  sentAt: string;
+  tag?: "commissioner" | "trade" | "waiver";
+  team: string;
+};
+
+type DirectThread = {
+  id: string;
+  initials: string;
+  lastMessage: string;
+  manager: string;
+  messages: ChatMessage[];
+  presence: Presence;
+  team: string;
+  unreadCount: number;
+};
+
+type RosterPlayer = FantasyPlayer & {
+  age: number | null;
+  keeperGrade: number;
+  note: string;
+  risk: number;
+  tradeValue: number;
+  trend: "rising" | "steady" | "falling" | string;
+};
+
+type RosterTeam = Omit<FantasyTeam, "roster"> & {
+  managerId: string | null;
+  roster: RosterPlayer[];
+};
+
+type TradeAsset = RosterPlayer & {
+  nflTeam: string;
+};
+
+type TradeTeam = RosterTeam & {
+  assets: TradeAsset[];
+  needs: Array<TradeAsset["position"]>;
+  style: "contender" | "balanced" | "retooling";
+};
+
+type RosterSnapshot = {
+  freeAgents: RosterPlayer[];
+  leagueId: string;
+  teams: RosterTeam[];
+  users: Array<{
+    displayName: string;
+    email?: string;
+    id: string;
+  }>;
+};
 
 type TradePreferences = {
   mode: TradeMode;
@@ -191,19 +238,26 @@ export default function HomePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [rules, setRules] = useState<ScoringRules>(defaultScoringRules);
-  const [selectedTeamId, setSelectedTeamId] = useState(leagueTeams[0].id);
+  const [rosterSnapshot, setRosterSnapshot] = useState<RosterSnapshot | null>(null);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState("");
   const [selectedStadiumId, setSelectedStadiumId] = useState(stadiumMapEntries[0].id);
-  const [yourTradeTeamId, setYourTradeTeamId] = useState(tradeTeams[0].id);
-  const [partnerTradeTeamId, setPartnerTradeTeamId] = useState(tradeTeams[1].id);
+  const [yourTradeTeamId, setYourTradeTeamId] = useState("");
+  const [partnerTradeTeamId, setPartnerTradeTeamId] = useState("");
   const [pprEnabled, setPprEnabled] = useState(true);
   const [waiverLock, setWaiverLock] = useState(true);
   const [tradeReview, setTradeReview] = useState(false);
 
-  const selectedTeam = leagueTeams.find((team) => team.id === selectedTeamId) ?? leagueTeams[0];
+  const rosterTeams = rosterSnapshot?.teams ?? [];
+  const selectedTeam = rosterTeams.find((team) => team.id === selectedTeamId) ?? rosterTeams[0] ?? null;
   const selectedStadium =
     stadiumMapEntries.find((stadium) => stadium.id === selectedStadiumId) ?? stadiumMapEntries[0];
-  const matchup = useMemo(() => buildMatchup(leagueTeams[0], leagueTeams[1], rules), [rules]);
-  const selectedScore = useMemo(() => scoreTeam(selectedTeam, rules), [rules, selectedTeam]);
+  const matchup = useMemo(
+    () => (rosterTeams.length >= 2 ? buildMatchup(rosterTeams[0], rosterTeams[1], rules) : null),
+    [rules, rosterTeams]
+  );
+  const selectedScore = useMemo(() => (selectedTeam ? scoreTeam(selectedTeam, rules) : null), [rules, selectedTeam]);
 
   useEffect(() => {
     let isMounted = true;
@@ -271,6 +325,59 @@ export default function HomePage() {
           setProfile(data);
         }
       });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [supabase, user]);
+
+  useEffect(() => {
+    if (!supabase || !user) {
+      setRosterSnapshot(null);
+      return;
+    }
+
+    let isMounted = true;
+    const activeSupabase = supabase;
+
+    async function loadRosters() {
+      const token = await getAccessToken(activeSupabase);
+      if (!token) {
+        if (isMounted) {
+          setRosterError("Your session expired. Sign in again.");
+        }
+        return;
+      }
+
+      if (isMounted) {
+        setRosterLoading(true);
+        setRosterError("");
+      }
+
+      const response = await fetch("/api/rosters", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+
+      if (!isMounted) {
+        return;
+      }
+
+      setRosterLoading(false);
+
+      if (!response.ok || !payload.teams) {
+        setRosterError(payload.error ?? "Unable to load real rosters.");
+        return;
+      }
+
+      const nextSnapshot = payload as RosterSnapshot;
+      setRosterSnapshot(nextSnapshot);
+      setSelectedTeamId((current) => current || nextSnapshot.teams[0]?.id || "");
+      setYourTradeTeamId((current) => current || nextSnapshot.teams[0]?.id || "");
+      setPartnerTradeTeamId((current) => current || nextSnapshot.teams.find((team) => team.id !== nextSnapshot.teams[0]?.id)?.id || "");
+    }
+
+    void loadRosters();
 
     return () => {
       isMounted = false;
@@ -385,22 +492,31 @@ export default function HomePage() {
 
         <SportsTicker />
 
-        {activeView === "dashboard" && <DashboardView matchup={matchup} />}
-        {activeView === "scoring" && <ScoringView matchup={matchup} />}
+        {activeView === "dashboard" && (
+          <DashboardView matchup={matchup} rosterError={rosterError} rosterLoading={rosterLoading} teams={rosterTeams} />
+        )}
+        {activeView === "scoring" && <ScoringView matchup={matchup} rosterError={rosterError} rosterLoading={rosterLoading} />}
         {activeView === "rosters" && (
           <RostersView
+            freeAgents={rosterSnapshot?.freeAgents ?? []}
+            rosterError={rosterError}
+            rosterLoading={rosterLoading}
             selectedScore={selectedScore}
             selectedTeamId={selectedTeamId}
             setSelectedTeamId={setSelectedTeamId}
+            teams={rosterTeams}
           />
         )}
         {activeView === "chat" && <ChatView profile={profile} supabase={supabase} user={user} />}
         {activeView === "trade" && (
           <TradeBuilderView
             partnerTradeTeamId={partnerTradeTeamId}
+            rosterError={rosterError}
+            rosterLoading={rosterLoading}
             supabase={supabase}
             setPartnerTradeTeamId={setPartnerTradeTeamId}
             setYourTradeTeamId={setYourTradeTeamId}
+            teams={rosterTeams}
             user={user}
             yourTradeTeamId={yourTradeTeamId}
           />
@@ -593,7 +709,7 @@ function SportsTicker() {
   const tickerItems = [
     "League update: Waivers lock in 18m",
     "League update: Trade review window closes tonight",
-    "League update: Fourth Down Syndicate projected +8.4",
+    "League update: Roster assignments now sync from Supabase",
     "Player stat: Bijan Robinson 112 rush yds and 2 TD",
     "Player stat: CeeDee Lamb 9 catches for 138 yds",
     "Player stat: Josh Allen 31.6 fantasy points"
@@ -615,32 +731,34 @@ function SportsTicker() {
 
 function TradeBuilderView({
   partnerTradeTeamId,
+  rosterError,
+  rosterLoading,
   supabase,
   setPartnerTradeTeamId,
   setYourTradeTeamId,
+  teams,
   user,
   yourTradeTeamId
 }: {
   partnerTradeTeamId: string;
+  rosterError: string;
+  rosterLoading: boolean;
   supabase: BrowserSupabaseClient;
   setPartnerTradeTeamId: (teamId: string) => void;
   setYourTradeTeamId: (teamId: string) => void;
+  teams: RosterTeam[];
   user: User;
   yourTradeTeamId: string;
 }) {
-  const [outgoingIds, setOutgoingIds] = useState<string[]>(["trade-p-4", "trade-p-5"]);
-  const [incomingIds, setIncomingIds] = useState<string[]>(["trade-p-10"]);
+  const [outgoingIds, setOutgoingIds] = useState<string[]>([]);
+  const [incomingIds, setIncomingIds] = useState<string[]>([]);
   const [preferences, setPreferences] = useState<TradePreferences>({
     mode: "win-now",
     riskTolerance: 52,
     keeperWeight: 38,
     needWeight: 72
   });
-  const [tradeVotes, setTradeVotes] = useState<TradeVote[]>([
-    { manager: "Maya", team: "North End Zone", vote: "approve" },
-    { manager: "Jordan", team: "Option Route", vote: "veto" },
-    { manager: "Sam", team: "Nickel Blitz", vote: "approve" }
-  ]);
+  const [tradeVotes, setTradeVotes] = useState<TradeVote[]>([]);
   const [tradeManagers, setTradeManagers] = useState<ChatManager[]>([]);
   const [selectedRecipientId, setSelectedRecipientId] = useState("");
   const [tradeProposals, setTradeProposals] = useState<UserTradeProposal[]>([]);
@@ -649,17 +767,56 @@ function TradeBuilderView({
   const [tradeWorkflowLoading, setTradeWorkflowLoading] = useState(true);
   const [sendingProposal, setSendingProposal] = useState(false);
 
-  const yourTeam = tradeTeams.find((team) => team.id === yourTradeTeamId) ?? tradeTeams[0];
+  const tradeTeams = useMemo(() => teams.map(toTradeTeam), [teams]);
+  const yourTeam = tradeTeams.find((team) => team.id === yourTradeTeamId) ?? tradeTeams[0] ?? null;
   const partnerTeam =
-    tradeTeams.find((team) => team.id === partnerTradeTeamId && team.id !== yourTeam.id) ??
-    tradeTeams.find((team) => team.id !== yourTeam.id) ??
-    tradeTeams[1];
-  const outgoingAssets = yourTeam.assets.filter((asset) => outgoingIds.includes(asset.id));
-  const incomingAssets = partnerTeam.assets.filter((asset) => incomingIds.includes(asset.id));
-  const analysis = analyzeTrade(outgoingAssets, incomingAssets, yourTeam, partnerTeam, preferences);
+    tradeTeams.find((team) => team.id === partnerTradeTeamId && team.id !== yourTeam?.id) ??
+    tradeTeams.find((team) => team.id !== yourTeam?.id) ??
+    null;
+  const outgoingAssets = yourTeam?.assets.filter((asset) => outgoingIds.includes(asset.id)) ?? [];
+  const incomingAssets = partnerTeam?.assets.filter((asset) => incomingIds.includes(asset.id)) ?? [];
+  const analysis =
+    yourTeam && partnerTeam
+      ? analyzeTrade(outgoingAssets, incomingAssets, yourTeam, partnerTeam, preferences)
+      : {
+          fairnessScore: 50,
+          incomingValue: 0,
+          insights: ["Roster assignments now come from Supabase instead of sample teams."],
+          netEdge: 0,
+          outgoingValue: 0,
+          recommendation: "Assign players to two real rosters to activate trade analysis.",
+          summary: "Use Roster Admin to assign players to the two real accounts, then return here to send a proposal.",
+          verdict: "Roster setup required."
+        };
   const voteSummary = summarizeTradeVotes(tradeVotes);
-  const yourVote = tradeVotes.find((vote) => vote.manager === yourTeam.manager)?.vote;
+  const yourVote = tradeVotes.find((vote) => vote.manager === yourTeam?.manager)?.vote;
   const realTradePartners = tradeManagers.filter((manager) => manager.id !== user.id);
+
+  useEffect(() => {
+    if (!tradeTeams.length) {
+      return;
+    }
+
+    const nextYourTeam = tradeTeams.find((team) => team.id === yourTradeTeamId) ?? tradeTeams[0];
+    const nextPartnerTeam =
+      tradeTeams.find((team) => team.id === partnerTradeTeamId && team.id !== nextYourTeam.id) ??
+      tradeTeams.find((team) => team.id !== nextYourTeam.id);
+
+    setYourTradeTeamId(nextYourTeam.id);
+    setPartnerTradeTeamId(nextPartnerTeam?.id ?? "");
+    setOutgoingIds((current) => {
+      const nextIds = current.filter((id) => nextYourTeam.assets.some((asset) => asset.id === id)).slice(0, 2);
+      const filledIds = nextIds.length ? nextIds : nextYourTeam.assets.slice(0, 1).map((asset) => asset.id);
+      return sameStringArray(current, filledIds) ? current : filledIds;
+    });
+    setIncomingIds((current) => {
+      const nextIds = nextPartnerTeam
+        ? current.filter((id) => nextPartnerTeam.assets.some((asset) => asset.id === id)).slice(0, 2)
+        : [];
+      const filledIds = nextIds.length || !nextPartnerTeam ? nextIds : nextPartnerTeam.assets.slice(0, 1).map((asset) => asset.id);
+      return sameStringArray(current, filledIds) ? current : filledIds;
+    });
+  }, [partnerTradeTeamId, setPartnerTradeTeamId, setYourTradeTeamId, tradeTeams, yourTradeTeamId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -718,18 +875,18 @@ function TradeBuilderView({
   function updateYourTeam(teamId: string) {
     setYourTradeTeamId(teamId);
     const nextTeam = tradeTeams.find((team) => team.id === teamId) ?? tradeTeams[0];
-    setOutgoingIds(nextTeam.assets.slice(0, 1).map((asset) => asset.id));
-    if (teamId === partnerTeam.id) {
+    setOutgoingIds(nextTeam?.assets.slice(0, 1).map((asset) => asset.id) ?? []);
+    if (teamId === partnerTeam?.id) {
       const nextPartner = tradeTeams.find((team) => team.id !== teamId) ?? tradeTeams[1];
-      setPartnerTradeTeamId(nextPartner.id);
-      setIncomingIds(nextPartner.assets.slice(0, 1).map((asset) => asset.id));
+      setPartnerTradeTeamId(nextPartner?.id ?? "");
+      setIncomingIds(nextPartner?.assets.slice(0, 1).map((asset) => asset.id) ?? []);
     }
   }
 
   function updatePartnerTeam(teamId: string) {
     setPartnerTradeTeamId(teamId);
     const nextTeam = tradeTeams.find((team) => team.id === teamId) ?? tradeTeams[1];
-    setIncomingIds(nextTeam.assets.slice(0, 1).map((asset) => asset.id));
+    setIncomingIds(nextTeam?.assets.slice(0, 1).map((asset) => asset.id) ?? []);
   }
 
   function castTradeVote(vote: TradeVoteChoice) {
@@ -744,6 +901,11 @@ function TradeBuilderView({
   }
 
   async function sendTradeProposal() {
+    if (!yourTeam || !partnerTeam) {
+      setTradeWorkflowError("Assign players to two real rosters before proposing a trade.");
+      return;
+    }
+
     if (!selectedRecipientId) {
       setTradeWorkflowError("Select a real trade partner first.");
       return;
@@ -822,27 +984,36 @@ function TradeBuilderView({
     <div className="view-grid trade-grid">
       <section className="section-panel trade-builder-panel">
         <PanelTitle icon={ArrowLeftRight} title="Trade Builder" />
+        {(rosterLoading || rosterError || !yourTeam || !partnerTeam) && (
+          <p className={rosterError ? "form-message error" : "empty-state"}>
+            {rosterLoading
+              ? "Loading real rosters..."
+              : rosterError || "Assign players to at least two real accounts in Roster Admin to enable trade proposals."}
+          </p>
+        )}
         <div className="trade-team-selectors">
           <label>
             <span>Your team</span>
-            <select value={yourTeam.id} onChange={(event) => updateYourTeam(event.target.value)}>
+            <select value={yourTeam?.id ?? ""} onChange={(event) => updateYourTeam(event.target.value)}>
               {tradeTeams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
               ))}
+              {!tradeTeams.length && <option value="">No real rosters</option>}
             </select>
           </label>
           <label>
             <span>Trade partner</span>
-            <select value={partnerTeam.id} onChange={(event) => updatePartnerTeam(event.target.value)}>
+            <select value={partnerTeam?.id ?? ""} onChange={(event) => updatePartnerTeam(event.target.value)}>
               {tradeTeams
-                .filter((team) => team.id !== yourTeam.id)
+                .filter((team) => team.id !== yourTeam?.id)
                 .map((team) => (
                   <option key={team.id} value={team.id}>
                     {team.name}
                   </option>
                 ))}
+              {!partnerTeam && <option value="">No trade partner</option>}
             </select>
           </label>
           <label>
@@ -867,7 +1038,7 @@ function TradeBuilderView({
 
         <div className="trade-offer-board">
           <TradeAssetColumn
-            assets={yourTeam.assets}
+            assets={yourTeam?.assets ?? []}
             selectedIds={outgoingIds}
             team={yourTeam}
             title="You Send"
@@ -882,7 +1053,7 @@ function TradeBuilderView({
             <p>{analysis.recommendation}</p>
           </div>
           <TradeAssetColumn
-            assets={partnerTeam.assets}
+            assets={partnerTeam?.assets ?? []}
             selectedIds={incomingIds}
             team={partnerTeam}
             title="You Receive"
@@ -896,7 +1067,7 @@ function TradeBuilderView({
           </div>
           <button
             className="primary-action"
-            disabled={sendingProposal || !selectedRecipientId || tradeWorkflowLoading}
+            disabled={sendingProposal || !selectedRecipientId || tradeWorkflowLoading || !yourTeam || !partnerTeam}
             onClick={() => void sendTradeProposal()}
             type="button"
           >
@@ -944,7 +1115,7 @@ function TradeBuilderView({
           onChange={(needWeight) => setPreferences((current) => ({ ...current, needWeight }))}
         />
         <div className="need-chip-row">
-          {yourTeam.needs.map((need) => (
+          {(yourTeam?.needs ?? []).map((need) => (
             <span key={need}>{need} need</span>
           ))}
         </div>
@@ -1525,7 +1696,7 @@ function TradeAssetColumn({
 }: {
   assets: TradeAsset[];
   selectedIds: string[];
-  team: TradeTeam;
+  team: TradeTeam | null;
   title: string;
   toggleAsset: (assetId: string) => void;
 }) {
@@ -1536,14 +1707,14 @@ function TradeAssetColumn({
     <div className="trade-asset-column">
       <div className="trade-column-header">
         <div>
-          <p className="eyebrow">{team.manager}</p>
+          <p className="eyebrow">{team?.manager ?? "No manager"}</p>
           <h3>{title}</h3>
-          <span>{team.name}</span>
+          <span>{team?.name ?? "No roster selected"}</span>
         </div>
         <b>{selectedValue}</b>
       </div>
       <div className="trade-asset-list">
-        {assets.map((asset) => {
+        {assets.length ? assets.map((asset) => {
           const selected = selectedIds.includes(asset.id);
           return (
             <button
@@ -1570,7 +1741,7 @@ function TradeAssetColumn({
               </span>
             </button>
           );
-        })}
+        }) : <p className="empty-state">No assigned players.</p>}
       </div>
     </div>
   );
@@ -1719,7 +1890,19 @@ function MapView({
   );
 }
 
-function DashboardView({ matchup }: { matchup: ReturnType<typeof buildMatchup> }) {
+function DashboardView({
+  matchup,
+  rosterError,
+  rosterLoading,
+  teams
+}: {
+  matchup: ReturnType<typeof buildMatchup> | null;
+  rosterError: string;
+  rosterLoading: boolean;
+  teams: RosterTeam[];
+}) {
+  const totalRostered = teams.reduce((sum, team) => sum + team.roster.length, 0);
+
   return (
     <div className="view-grid dashboard-grid">
       <section className="hero-band">
@@ -1728,31 +1911,37 @@ function DashboardView({ matchup }: { matchup: ReturnType<typeof buildMatchup> }
             <span className="broadcast-pill">Live Matchup</span>
           </p>
           <h3>
-            {matchup.home.team.name} vs {matchup.away.team.name}
+            {matchup ? `${matchup.home.team.name} vs ${matchup.away.team.name}` : "Real rosters pending"}
           </h3>
           <div className="hero-chip-row">
-            <span>Win prob swinging</span>
-            <span>Roster edge +4.8</span>
-            <span>Weather neutral</span>
+            <span>{teams.length} real managers</span>
+            <span>{totalRostered} rostered players</span>
+            <span>{rosterLoading ? "Syncing rosters" : "Supabase live"}</span>
           </div>
         </div>
-        <div className="scoreline">
-          <ScoreBlock label={matchup.home.team.manager} value={matchup.home.actualPoints} />
-          <span className="score-divider">at</span>
-          <ScoreBlock label={matchup.away.team.manager} value={matchup.away.actualPoints} />
-        </div>
+        {matchup ? (
+          <div className="scoreline">
+            <ScoreBlock label={matchup.home.team.manager} value={matchup.home.actualPoints} />
+            <span className="score-divider">at</span>
+            <ScoreBlock label={matchup.away.team.manager} value={matchup.away.actualPoints} />
+          </div>
+        ) : (
+          <div className="scoreline empty-scoreline">
+            <strong>{rosterError || "Assign players in Roster Admin to activate scoring."}</strong>
+          </div>
+        )}
       </section>
 
       <section className="spotlight-grid">
-        <SpotlightCard label="Playoff Heat" value="87%" detail="Top seed pressure rising" />
-        <SpotlightCard label="Waiver Budget" value="$42" detail="Aggressive window open" />
-        <SpotlightCard label="Trade Market" value="Hot" detail="3 managers shopping RB" />
+        <SpotlightCard label="Managers" value={teams.length.toString()} detail="Real Supabase accounts only" />
+        <SpotlightCard label="Rostered" value={totalRostered.toString()} detail="Assigned by roster admin" />
+        <SpotlightCard label="Trade Market" value={teams.length >= 2 ? "Ready" : "Pending"} detail="Requires two real rosters" />
       </section>
 
       <section className="section-panel standings-panel">
         <PanelTitle icon={Trophy} title="Standings" />
         <div className="standings-list">
-          {leagueTeams.map((team, index) => (
+          {teams.length ? teams.map((team, index) => (
             <div className="standings-row" key={team.id}>
               <span className="rank">{index + 1}</span>
               <div>
@@ -1761,42 +1950,56 @@ function DashboardView({ matchup }: { matchup: ReturnType<typeof buildMatchup> }
               </div>
               <b>{team.record}</b>
             </div>
-          ))}
+          )) : <p className="empty-state">No real rosters are available yet.</p>}
         </div>
       </section>
 
       <section className="section-panel activity-panel">
         <PanelTitle icon={Activity} title="League Activity" />
         <div className="activity-list">
-          {recentActivity.map((activity) => (
-            <div className="activity-row" key={activity.title}>
-              <span>{activity.time}</span>
-              <strong>{activity.title}</strong>
-              <p>{activity.detail}</p>
+          {teams.map((team) => (
+            <div className="activity-row" key={team.id}>
+              <span>{team.roster.length} players</span>
+              <strong>{team.name}</strong>
+              <p>{team.manager} roster is connected to Supabase.</p>
             </div>
           ))}
+          {!teams.length && <p className="empty-state">Roster activity appears after real users are loaded.</p>}
         </div>
       </section>
 
       <section className="section-panel">
         <PanelTitle icon={ClipboardList} title="Waiver Board" />
         <div className="waiver-list">
-          {waiverTargets.map((target) => (
-            <div className="waiver-row" key={target.name}>
-              <div>
-                <strong>{target.name}</strong>
-                <span>{target.position} | {target.team}</span>
-              </div>
-              <b>{target.priority}</b>
-            </div>
-          ))}
+          <p className="empty-state">Unassigned players now live as free agents in the roster screen.</p>
         </div>
       </section>
     </div>
   );
 }
 
-function ScoringView({ matchup }: { matchup: ReturnType<typeof buildMatchup> }) {
+function ScoringView({
+  matchup,
+  rosterError,
+  rosterLoading
+}: {
+  matchup: ReturnType<typeof buildMatchup> | null;
+  rosterError: string;
+  rosterLoading: boolean;
+}) {
+  if (!matchup) {
+    return (
+      <div className="view-grid scoring-grid">
+        <section className="section-panel roster-table-panel">
+          <PanelTitle icon={Gauge} title="Scoring Detail" />
+          <p className="empty-state">
+            {rosterLoading ? "Loading real rosters..." : rosterError || "Assign players to at least two real accounts to score a matchup."}
+          </p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="view-grid scoring-grid">
       <section className="matchup-board">
@@ -1846,20 +2049,50 @@ function ScoringView({ matchup }: { matchup: ReturnType<typeof buildMatchup> }) 
 }
 
 function RostersView({
+  freeAgents,
+  rosterError,
+  rosterLoading,
   selectedScore,
   selectedTeamId,
-  setSelectedTeamId
+  setSelectedTeamId,
+  teams
 }: {
-  selectedScore: ReturnType<typeof scoreTeam>;
+  freeAgents: RosterPlayer[];
+  rosterError: string;
+  rosterLoading: boolean;
+  selectedScore: ReturnType<typeof scoreTeam> | null;
   selectedTeamId: string;
   setSelectedTeamId: (teamId: string) => void;
+  teams: RosterTeam[];
 }) {
+  if (rosterLoading) {
+    return (
+      <div className="view-grid roster-grid">
+        <section className="section-panel roster-table-panel">
+          <PanelTitle icon={Users} title="Rosters" />
+          <p className="empty-state">Loading real Supabase rosters...</p>
+        </section>
+      </div>
+    );
+  }
+
+  if (rosterError || !selectedScore) {
+    return (
+      <div className="view-grid roster-grid">
+        <section className="section-panel roster-table-panel">
+          <PanelTitle icon={Users} title="Rosters" />
+          <p className="empty-state">{rosterError || "No real rosters are available yet."}</p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="view-grid roster-grid">
       <section className="section-panel roster-selector">
         <PanelTitle icon={Users} title="Team Control" />
         <div className="segmented-control">
-          {leagueTeams.map((team) => (
+          {teams.map((team) => (
             <button
               className={team.id === selectedTeamId ? "selected" : ""}
               key={team.id}
@@ -1880,6 +2113,11 @@ function RostersView({
       <section className="section-panel roster-table-panel">
         <PanelTitle icon={Shield} title={`${selectedScore.team.name} Roster`} />
         <RosterTable players={selectedScore.team.roster} />
+      </section>
+
+      <section className="section-panel roster-table-panel">
+        <PanelTitle icon={Search} title="Free Agents" />
+        <RosterTable players={freeAgents} />
       </section>
     </div>
   );
@@ -2082,11 +2320,13 @@ function SettingsView({
 
 function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminRoster, setAdminRoster] = useState<RosterSnapshot | null>(null);
   const [passwordsByUser, setPasswordsByUser] = useState<Record<string, string>>({});
   const [loadingAdmin, setLoadingAdmin] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminError, setAdminError] = useState("");
   const [adminStatus, setAdminStatus] = useState("");
+  const [assigningPlayerId, setAssigningPlayerId] = useState<string | null>(null);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2101,11 +2341,18 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
         return;
       }
 
-      const response = await fetch("/api/admin/users", {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      const [userResponse, rosterResponse] = await Promise.all([
+        fetch("/api/admin/users", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }),
+        fetch("/api/admin/rosters", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        })
+      ]);
 
       if (!isMounted) {
         return;
@@ -2113,20 +2360,27 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
 
       setLoadingAdmin(false);
 
-      if (response.status === 403) {
+      if (userResponse.status === 403 || rosterResponse.status === 403) {
         setIsAdmin(false);
         return;
       }
 
-      const payload = (await response.json()) as { error?: string; users?: AdminUser[] };
+      const userPayload = (await userResponse.json()) as { error?: string; users?: AdminUser[] };
+      const rosterPayload = (await rosterResponse.json()) as { error?: string } & Partial<RosterSnapshot>;
 
-      if (!response.ok) {
-        setAdminError(payload.error ?? "Unable to load admin users.");
+      if (!userResponse.ok) {
+        setAdminError(userPayload.error ?? "Unable to load admin users.");
+        return;
+      }
+
+      if (!rosterResponse.ok || !rosterPayload.teams) {
+        setAdminError(rosterPayload.error ?? "Unable to load roster admin.");
         return;
       }
 
       setIsAdmin(true);
-      setAdminUsers(payload.users ?? []);
+      setAdminUsers(userPayload.users ?? []);
+      setAdminRoster(rosterPayload as RosterSnapshot);
     }
 
     void loadAdminUsers();
@@ -2174,6 +2428,42 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
     setAdminStatus("Password updated.");
   }
 
+  async function assignRosterPlayer(playerId: string, managerId: string, rosterSlot: string) {
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setAdminError("Your session expired. Sign in again.");
+      return;
+    }
+
+    setAssigningPlayerId(playerId);
+    setAdminError("");
+    setAdminStatus("");
+
+    const response = await fetch("/api/admin/rosters", {
+      body: JSON.stringify({
+        managerId: managerId || null,
+        playerId,
+        rosterSlot
+      }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      method: "PATCH"
+    });
+    const payload = (await response.json()) as { error?: string } & Partial<RosterSnapshot>;
+
+    setAssigningPlayerId(null);
+
+    if (!response.ok || !payload.teams) {
+      setAdminError(payload.error ?? "Unable to update roster assignment.");
+      return;
+    }
+
+    setAdminRoster(payload as RosterSnapshot);
+    setAdminStatus(managerId ? "Player assigned." : "Player moved to free agency.");
+  }
+
   if (loadingAdmin) {
     return null;
   }
@@ -2183,6 +2473,7 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
   }
 
   return (
+    <>
     <section className="section-panel admin-panel">
       <PanelTitle icon={Shield} title="Admin Roster" />
       <div className="admin-panel-header">
@@ -2248,6 +2539,71 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
         ))}
       </div>
     </section>
+    {adminRoster && (
+      <section className="section-panel roster-admin-panel">
+        <PanelTitle icon={ClipboardList} title="Roster Admin" />
+        <div className="admin-panel-header">
+          <div>
+            <strong>{adminRoster.teams.length} real rosters</strong>
+            <span>Assign players to accounts. Unassigned players remain free agents.</span>
+          </div>
+        </div>
+        <div className="roster-admin-list">
+          {[...adminRoster.teams.flatMap((team) => team.roster), ...adminRoster.freeAgents].map((player) => {
+            const owner = adminRoster.teams.find((team) => team.roster.some((rosteredPlayer) => rosteredPlayer.id === player.id));
+            return (
+              <article className="roster-admin-row" key={player.id}>
+                <span className="roster-player-cell">
+                  <PlayerImage
+                    className="roster-headshot"
+                    fallback={player.position}
+                    imageUrl={player.imageUrl}
+                    name={player.name}
+                  />
+                  <span>
+                    <strong>{player.name}</strong>
+                    <small>{player.position} | {player.team}</small>
+                  </span>
+                </span>
+                <label>
+                  <span>Owner</span>
+                  <select
+                    disabled={assigningPlayerId === player.id}
+                    value={owner?.managerId ?? ""}
+                    onChange={(event) =>
+                      void assignRosterPlayer(player.id, event.target.value, String(player.rosterSlot) === "FA" ? "BN" : player.rosterSlot)
+                    }
+                  >
+                    <option value="">Free agent</option>
+                    {adminRoster.teams.map((team) => (
+                      <option key={team.id} value={team.managerId ?? ""}>
+                        {team.manager}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Slot</span>
+                  <select
+                    disabled={assigningPlayerId === player.id || !owner}
+                    value={String(player.rosterSlot) === "FA" ? "BN" : player.rosterSlot}
+                    onChange={(event) => void assignRosterPlayer(player.id, owner?.managerId ?? "", event.target.value)}
+                  >
+                    {["QB", "RB", "WR", "TE", "FLEX", "K", "DST", "BN", "IR"].map((slot) => (
+                      <option key={slot} value={slot}>
+                        {slot}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <b>{owner?.name ?? "Free agent"}</b>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    )}
+    </>
   );
 }
 
@@ -2598,7 +2954,8 @@ function adjustedAssetValue(asset: TradeAsset, team: TradeTeam, preferences: Tra
   const keeperBonus = (asset.keeperGrade / 100) * preferences.keeperWeight * mode.keeperWeight;
   const riskPenalty = asset.risk * ((100 - preferences.riskTolerance) / 100) * 0.34;
   const trendBonus = asset.trend === "rising" ? 5 : asset.trend === "falling" ? -4 : 1;
-  const futureAssetBonus = asset.position === "PICK" ? mode.pickWeight : asset.position === "FAAB" ? 2 : 0;
+  const assetPosition = String(asset.position);
+  const futureAssetBonus = assetPosition === "PICK" ? mode.pickWeight : assetPosition === "FAAB" ? 2 : 0;
   const ageBonus = asset.age && asset.age <= 25 ? mode.ageWeight : asset.age && asset.age >= 30 ? -mode.ageWeight : 0;
 
   return asset.tradeValue + needBonus + projectedBonus + keeperBonus + trendBonus + futureAssetBonus + ageBonus - riskPenalty;
@@ -2631,6 +2988,25 @@ function tradeAssetToPayload(asset: TradeAsset) {
     label: asset.name,
     value: asset.tradeValue
   };
+}
+
+function toTradeTeam(team: RosterTeam): TradeTeam {
+  const assets = team.roster.map((player) => ({
+    ...player,
+    nflTeam: player.team
+  }));
+
+  return {
+    ...team,
+    assets,
+    needs: inferRosterNeeds(team.roster),
+    style: "balanced"
+  };
+}
+
+function inferRosterNeeds(roster: RosterPlayer[]): Array<TradeAsset["position"]> {
+  const positions = ["QB", "RB", "WR", "TE"] as Array<TradeAsset["position"]>;
+  return positions.filter((position) => !roster.some((player) => player.position === position));
 }
 
 function summarizeTradeVotes(votes: TradeVote[]) {
@@ -2669,6 +3045,10 @@ function tradeVoteResultDetail(result: string): string {
 
 function toggleId(ids: string[], id: string): string[] {
   return ids.includes(id) ? ids.filter((existingId) => existingId !== id) : [...ids, id];
+}
+
+function sameStringArray(first: string[], second: string[]) {
+  return first.length === second.length && first.every((value, index) => value === second[index]);
 }
 
 function accountInitials(profile: Profile | null, user: User): string {

@@ -911,6 +911,12 @@ th {
   grid-column: 1 / -1;
 }
 
+.roster-admin-panel {
+  display: grid;
+  gap: 14px;
+  grid-column: 1 / -1;
+}
+
 .admin-panel-header {
   align-items: center;
   background: #f7f9f8;
@@ -936,6 +942,49 @@ th {
 .admin-user-list {
   display: grid;
   gap: 12px;
+}
+
+.roster-admin-list {
+  display: grid;
+  gap: 10px;
+}
+
+.roster-admin-row {
+  align-items: center;
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1fr) 180px 120px minmax(120px, 0.6fr);
+  padding: 12px;
+}
+
+.roster-admin-row label {
+  display: grid;
+  gap: 5px;
+}
+
+.roster-admin-row label span,
+.roster-admin-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.roster-admin-row select {
+  appearance: none;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-weight: 800;
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.roster-admin-row > b {
+  color: var(--green);
+  font-size: 13px;
 }
 
 .admin-user-card {
@@ -2221,10 +2270,22 @@ th {
   color: var(--blue);
 }
 
+.status-pill.free-agent {
+  background: #fff6df;
+  color: #92640f;
+}
+
 .status-pill.injured,
 .status-pill.bye {
   background: #fae9e6;
   color: var(--coral);
+}
+
+.empty-state {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
 }
 
 .setting-row {
@@ -2318,7 +2379,8 @@ th {
   }
 
   .admin-data-grid,
-  .admin-password-row {
+  .admin-password-row,
+  .roster-admin-row {
     grid-template-columns: 1fr;
   }
 
