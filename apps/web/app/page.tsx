@@ -295,6 +295,8 @@ export default function HomePage() {
               >
                 <Icon size={18} />
                 <span>{view.label}</span>
+                {view.key === "chat" && <b className="nav-badge">3</b>}
+                {view.key === "trade" && <b className="nav-badge hot">AI</b>}
               </button>
             );
           })}
@@ -317,7 +319,10 @@ export default function HomePage() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Week 12</p>
+            <p className="eyebrow live-eyebrow">
+              <span className="live-dot" />
+              Week 12 Live Board
+            </p>
             <h2>{viewTitle(activeView)}</h2>
           </div>
           <div className="topbar-actions">
@@ -337,6 +342,8 @@ export default function HomePage() {
             </button>
           </div>
         </header>
+
+        <SportsTicker />
 
         {activeView === "dashboard" && <DashboardView matchup={matchup} />}
         {activeView === "scoring" && <ScoringView matchup={matchup} />}
@@ -537,6 +544,26 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
         </form>
       </section>
     </main>
+  );
+}
+
+function SportsTicker() {
+  const tickerItems = [
+    "Waivers lock in 18m",
+    "Trade AI found 2 leverage spots",
+    "Fourth Down Syndicate projected +8.4",
+    "Live scoring sync healthy"
+  ];
+
+  return (
+    <section className="sports-ticker" aria-label="League ticker">
+      <span className="ticker-label">HQ Wire</span>
+      <div className="ticker-track">
+        {[...tickerItems, ...tickerItems].map((item, index) => (
+          <span key={`${item}-${index}`}>{item}</span>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1066,17 +1093,30 @@ function DashboardView({ matchup }: { matchup: ReturnType<typeof buildMatchup> }
   return (
     <div className="view-grid dashboard-grid">
       <section className="hero-band">
-        <div>
-          <p className="eyebrow">Live Matchup</p>
+        <div className="hero-copy">
+          <p className="eyebrow">
+            <span className="broadcast-pill">Live Matchup</span>
+          </p>
           <h3>
             {matchup.home.team.name} vs {matchup.away.team.name}
           </h3>
+          <div className="hero-chip-row">
+            <span>Win prob swinging</span>
+            <span>Roster edge +4.8</span>
+            <span>Weather neutral</span>
+          </div>
         </div>
         <div className="scoreline">
           <ScoreBlock label={matchup.home.team.manager} value={matchup.home.actualPoints} />
           <span className="score-divider">at</span>
           <ScoreBlock label={matchup.away.team.manager} value={matchup.away.actualPoints} />
         </div>
+      </section>
+
+      <section className="spotlight-grid">
+        <SpotlightCard label="Playoff Heat" value="87%" detail="Top seed pressure rising" />
+        <SpotlightCard label="Waiver Budget" value="$42" detail="Aggressive window open" />
+        <SpotlightCard label="Trade Market" value="Hot" detail="3 managers shopping RB" />
       </section>
 
       <section className="section-panel standings-panel">
@@ -1672,6 +1712,16 @@ function ScoreBlock({ label, value }: { label: string; value: number }) {
       <span>{label}</span>
       <strong>{formatPoints(value)}</strong>
     </div>
+  );
+}
+
+function SpotlightCard({ detail, label, value }: { detail: string; label: string; value: string }) {
+  return (
+    <article className="spotlight-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </article>
   );
 }
 
