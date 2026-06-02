@@ -26,7 +26,7 @@ import {
   Users,
   Zap
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   buildMatchup,
@@ -155,13 +155,20 @@ type UserTradeProposal = {
   aiNetEdge: number | null;
   createdAt: string;
   id: string;
-  incomingAssets: Array<{ label: string; value?: number }>;
+  incomingAssets: TradeProposalAsset[];
   note: string | null;
-  outgoingAssets: Array<{ label: string; value?: number }>;
+  outgoingAssets: TradeProposalAsset[];
   recipientId: string;
   senderId: string;
   status: string;
   updatedAt: string;
+};
+
+type TradeProposalAsset = {
+  label: string;
+  playerId?: string;
+  rosterSlot?: string;
+  value?: number;
 };
 
 type Profile = {
@@ -342,69 +349,52 @@ export default function HomePage() {
     };
   }, [supabase, user]);
 
-  useEffect(() => {
+  const refreshRosters = useCallback(async () => {
     if (!supabase || !user) {
       setRosterSnapshot(null);
       return;
     }
 
-    let isMounted = true;
-    const activeSupabase = supabase;
-
-    async function loadRosters() {
-      const token = await getAccessToken(activeSupabase);
-      if (!token) {
-        if (isMounted) {
-          setRosterError("Your session expired. Sign in again.");
-        }
-        return;
-      }
-
-      if (isMounted) {
-        setRosterLoading(true);
-        setRosterError("");
-      }
-
-      let response: Response;
-      let payload: ({ email?: string; error?: string; hint?: string } & Partial<RosterSnapshot>) | null = null;
-
-      try {
-        response = await fetch("/api/rosters", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        payload = await readJsonResponse(response);
-      } catch (error) {
-        if (isMounted) {
-          setRosterLoading(false);
-          setRosterError(error instanceof Error ? error.message : "Unable to load real rosters.");
-        }
-        return;
-      }
-
-      if (!isMounted) {
-        return;
-      }
-
-      setRosterLoading(false);
-
-      if (!response.ok || !payload?.teams) {
-        setRosterError(payload?.error ?? "Unable to load real rosters.");
-        return;
-      }
-
-      const nextSnapshot = payload as RosterSnapshot;
-      setRosterSnapshot(nextSnapshot);
-      setSelectedTeamId((current) => current || nextSnapshot.teams[0]?.id || "");
-      setYourTradeTeamId((current) => current || nextSnapshot.teams[0]?.id || "");
-      setPartnerTradeTeamId((current) => current || nextSnapshot.teams.find((team) => team.id !== nextSnapshot.teams[0]?.id)?.id || "");
+    const token = await getAccessToken(supabase);
+    if (!token) {
+      setRosterError("Your session expired. Sign in again.");
+      return;
     }
 
-    void loadRosters();
+    setRosterLoading(true);
+    setRosterError("");
 
-    return () => {
-      isMounted = false;
-    };
+    let response: Response;
+    let payload: ({ email?: string; error?: string; hint?: string } & Partial<RosterSnapshot>) | null = null;
+
+    try {
+      response = await fetch("/api/rosters", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      payload = await readJsonResponse(response);
+    } catch (error) {
+      setRosterLoading(false);
+      setRosterError(error instanceof Error ? error.message : "Unable to load real rosters.");
+      return;
+    }
+
+    setRosterLoading(false);
+
+    if (!response.ok || !payload?.teams) {
+      setRosterError(payload?.error ?? "Unable to load real rosters.");
+      return;
+    }
+
+    const nextSnapshot = payload as RosterSnapshot;
+    setRosterSnapshot(nextSnapshot);
+    setSelectedTeamId((current) => current || nextSnapshot.teams[0]?.id || "");
+    setYourTradeTeamId((current) => current || nextSnapshot.teams[0]?.id || "");
+    setPartnerTradeTeamId((current) => current || nextSnapshot.teams.find((team) => team.id !== nextSnapshot.teams[0]?.id)?.id || "");
   }, [supabase, user]);
+
+  useEffect(() => {
+    void refreshRosters();
+  }, [refreshRosters]);
 
   function updateRule(key: keyof ScoringRules, rawValue: string) {
     const nextValue = Number(rawValue);
@@ -546,6 +536,7 @@ export default function HomePage() {
             partnerTradeTeamId={partnerTradeTeamId}
             rosterError={rosterError}
             rosterLoading={rosterLoading}
+            refreshRosters={refreshRosters}
             supabase={supabase}
             setPartnerTradeTeamId={setPartnerTradeTeamId}
             setYourTradeTeamId={setYourTradeTeamId}
@@ -765,6 +756,7 @@ function SportsTicker() {
 
 function TradeBuilderView({
   partnerTradeTeamId,
+  refreshRosters,
   rosterError,
   rosterLoading,
   supabase,
@@ -775,6 +767,7 @@ function TradeBuilderView({
   yourTradeTeamId
 }: {
   partnerTradeTeamId: string;
+  refreshRosters: () => Promise<void>;
   rosterError: string;
   rosterLoading: boolean;
   supabase: BrowserSupabaseClient;
@@ -1011,6 +1004,13 @@ function TradeBuilderView({
     setTradeProposals((proposals) =>
       proposals.map((proposal) => (proposal.id === proposalId ? payload.proposal! : proposal))
     );
+
+    if (status === "accepted") {
+      await refreshRosters();
+      setTradeWorkflowStatus("Trade proposal accepted and rosters updated.");
+      return;
+    }
+
     setTradeWorkflowStatus(`Trade proposal ${status}.`);
   }
 
@@ -1667,6 +1667,13 @@ function ProposalColumn({
                   </button>
                 </div>
               )}
+              {isIncoming && proposal.status === "accepted" && (
+                <div className="proposal-actions">
+                  <button className="approve" onClick={() => void updateProposalStatus(proposal.id, "accepted")} type="button">
+                    Process roster move
+                  </button>
+                </div>
+              )}
             </article>
           );
         })
@@ -1677,7 +1684,7 @@ function ProposalColumn({
   );
 }
 
-function ProposalAssets({ assets, title }: { assets: Array<{ label: string; value?: number }>; title: string }) {
+function ProposalAssets({ assets, title }: { assets: TradeProposalAsset[]; title: string }) {
   return (
     <div className="proposal-assets">
       <span>{title}</span>
@@ -3336,6 +3343,8 @@ function tradeModeLabel(mode: TradeMode): string {
 function tradeAssetToPayload(asset: TradeAsset) {
   return {
     label: asset.name,
+    playerId: asset.id,
+    rosterSlot: asset.rosterSlot,
     value: asset.tradeValue
   };
 }
