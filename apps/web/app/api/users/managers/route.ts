@@ -59,7 +59,11 @@ export async function GET(request: Request) {
   return Response.json({ managers });
 }
 
-function getStringMetadata(metadata: Record<string, unknown>, key: string): string | null {
+function getStringMetadata(metadata: Record<string, unknown> | null | undefined, key: string): string | null {
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+
   const value = metadata[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }

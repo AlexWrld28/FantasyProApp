@@ -858,38 +858,49 @@ function TradeBuilderView({
         return;
       }
 
-      const [managerResponse, proposalResponse] = await Promise.all([
-        fetch("/api/users/managers", {
-          headers: { Authorization: `Bearer ${token}` }
-        }),
-        fetch("/api/trades/proposals", {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-      ]);
-      const managerPayload = (await managerResponse.json()) as { error?: string; managers?: ChatManager[] };
-      const proposalPayload = (await proposalResponse.json()) as { error?: string; proposals?: UserTradeProposal[] };
+      try {
+        const [managerResponse, proposalResponse] = await Promise.all([
+          fetch("/api/users/managers", {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          fetch("/api/trades/proposals", {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
+        const [managerPayload, proposalPayload] = await Promise.all([
+          readJsonResponse<{ error?: string; managers?: ChatManager[] }>(managerResponse),
+          readJsonResponse<{ error?: string; proposals?: UserTradeProposal[] }>(proposalResponse)
+        ]);
 
-      if (!isMounted) {
-        return;
+        if (!isMounted) {
+          return;
+        }
+
+        setTradeWorkflowLoading(false);
+
+        if (!managerResponse.ok) {
+          setTradeWorkflowError(managerPayload.error ?? "Unable to load real trade partners.");
+          return;
+        }
+
+        if (!proposalResponse.ok) {
+          setTradeWorkflowError(proposalPayload.error ?? "Unable to load trade proposals.");
+          return;
+        }
+
+        const nextManagers = managerPayload.managers ?? [];
+        const nextPartners = nextManagers.filter((manager) => manager.id !== user.id);
+        setTradeManagers(nextManagers);
+        setSelectedRecipientId((current) => current || nextPartners[0]?.id || "");
+        setTradeProposals(proposalPayload.proposals ?? []);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setTradeWorkflowLoading(false);
+        setTradeWorkflowError(error instanceof Error ? error.message : "Unable to load real trade workflow.");
       }
-
-      setTradeWorkflowLoading(false);
-
-      if (!managerResponse.ok) {
-        setTradeWorkflowError(managerPayload.error ?? "Unable to load real trade partners.");
-        return;
-      }
-
-      if (!proposalResponse.ok) {
-        setTradeWorkflowError(proposalPayload.error ?? "Unable to load trade proposals.");
-        return;
-      }
-
-      const nextManagers = managerPayload.managers ?? [];
-      const nextPartners = nextManagers.filter((manager) => manager.id !== user.id);
-      setTradeManagers(nextManagers);
-      setSelectedRecipientId((current) => current || nextPartners[0]?.id || "");
-      setTradeProposals(proposalPayload.proposals ?? []);
     }
 
     void loadTradeWorkflow();
@@ -948,32 +959,37 @@ function TradeBuilderView({
     setTradeWorkflowError("");
     setTradeWorkflowStatus("");
 
-    const response = await fetch("/api/trades/proposals", {
-      body: JSON.stringify({
-        aiFairnessScore: analysis.fairnessScore,
-        aiNetEdge: analysis.netEdge,
-        incomingAssets: incomingAssets.map(tradeAssetToPayload),
-        note: analysis.verdict,
-        outgoingAssets: outgoingAssets.map(tradeAssetToPayload),
-        recipientId: selectedRecipientId
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      method: "POST"
-    });
-    const payload = (await response.json()) as { error?: string; proposal?: UserTradeProposal };
+    try {
+      const response = await fetch("/api/trades/proposals", {
+        body: JSON.stringify({
+          aiFairnessScore: analysis.fairnessScore,
+          aiNetEdge: analysis.netEdge,
+          incomingAssets: incomingAssets.map(tradeAssetToPayload),
+          note: analysis.verdict,
+          outgoingAssets: outgoingAssets.map(tradeAssetToPayload),
+          recipientId: selectedRecipientId
+        }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        method: "POST"
+      });
+      const payload = await readJsonResponse<{ error?: string; proposal?: UserTradeProposal }>(response);
 
-    setSendingProposal(false);
+      setSendingProposal(false);
 
-    if (!response.ok || !payload.proposal) {
-      setTradeWorkflowError(payload.error ?? "Unable to send trade proposal.");
-      return;
+      if (!response.ok || !payload.proposal) {
+        setTradeWorkflowError(payload.error ?? "Unable to send trade proposal.");
+        return;
+      }
+
+      setTradeProposals((proposals) => [payload.proposal!, ...proposals]);
+      setTradeWorkflowStatus("Trade proposal sent.");
+    } catch (error) {
+      setSendingProposal(false);
+      setTradeWorkflowError(error instanceof Error ? error.message : "Unable to send trade proposal.");
     }
-
-    setTradeProposals((proposals) => [payload.proposal!, ...proposals]);
-    setTradeWorkflowStatus("Trade proposal sent.");
   }
 
   async function updateTradeProposalStatus(proposalId: string, status: "accepted" | "declined" | "voting") {
@@ -986,32 +1002,36 @@ function TradeBuilderView({
     setTradeWorkflowError("");
     setTradeWorkflowStatus("");
 
-    const response = await fetch(`/api/trades/proposals/${proposalId}`, {
-      body: JSON.stringify({ status }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      method: "PATCH"
-    });
-    const payload = (await response.json()) as { error?: string; proposal?: UserTradeProposal };
+    try {
+      const response = await fetch(`/api/trades/proposals/${proposalId}`, {
+        body: JSON.stringify({ status }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        method: "PATCH"
+      });
+      const payload = await readJsonResponse<{ error?: string; proposal?: UserTradeProposal }>(response);
 
-    if (!response.ok || !payload.proposal) {
-      setTradeWorkflowError(payload.error ?? "Unable to update trade proposal.");
-      return;
+      if (!response.ok || !payload.proposal) {
+        setTradeWorkflowError(payload.error ?? "Unable to update trade proposal.");
+        return;
+      }
+
+      setTradeProposals((proposals) =>
+        proposals.map((proposal) => (proposal.id === proposalId ? payload.proposal! : proposal))
+      );
+
+      if (status === "accepted") {
+        await refreshRosters();
+        setTradeWorkflowStatus("Trade proposal accepted and rosters updated.");
+        return;
+      }
+
+      setTradeWorkflowStatus(`Trade proposal ${status}.`);
+    } catch (error) {
+      setTradeWorkflowError(error instanceof Error ? error.message : "Unable to update trade proposal.");
     }
-
-    setTradeProposals((proposals) =>
-      proposals.map((proposal) => (proposal.id === proposalId ? payload.proposal! : proposal))
-    );
-
-    if (status === "accepted") {
-      await refreshRosters();
-      setTradeWorkflowStatus("Trade proposal accepted and rosters updated.");
-      return;
-    }
-
-    setTradeWorkflowStatus(`Trade proposal ${status}.`);
   }
 
   return (
@@ -1273,25 +1293,34 @@ function ChatView({
         return;
       }
 
-      const response = await fetch("/api/users/managers", {
-        headers: {
-          Authorization: `Bearer ${token}`
+      try {
+        const response = await fetch("/api/users/managers", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        const payload = await readJsonResponse<{ error?: string; managers?: ChatManager[] }>(response);
+
+        if (!isMounted) {
+          return;
         }
-      });
-      const payload = (await response.json()) as { error?: string; managers?: ChatManager[] };
 
-      if (!isMounted) {
-        return;
+        setManagersLoading(false);
+
+        if (!response.ok) {
+          setManagersError(payload.error ?? "Unable to load real league users.");
+          return;
+        }
+
+        setManagers(payload.managers ?? []);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setManagersLoading(false);
+        setManagersError(error instanceof Error ? error.message : "Unable to load real league users.");
       }
-
-      setManagersLoading(false);
-
-      if (!response.ok) {
-        setManagersError(payload.error ?? "Unable to load real league users.");
-        return;
-      }
-
-      setManagers(payload.managers ?? []);
     }
 
     void loadManagers();
@@ -1311,28 +1340,33 @@ function ChatView({
     setMessagesLoading(true);
     setMessageError("");
 
-    const response = await fetch(`/api/chat/direct?peerId=${encodeURIComponent(member.id)}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
+    try {
+      const response = await fetch(`/api/chat/direct?peerId=${encodeURIComponent(member.id)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const payload = await readJsonResponse<{ error?: string; messages?: ApiDirectMessage[] }>(response);
+
+      setMessagesLoading(false);
+
+      if (!response.ok) {
+        setMessageError(payload.error ?? "Unable to load direct messages.");
+        return;
       }
-    });
-    const payload = (await response.json()) as { error?: string; messages?: ApiDirectMessage[] };
 
-    setMessagesLoading(false);
-
-    if (!response.ok) {
-      setMessageError(payload.error ?? "Unable to load direct messages.");
-      return;
+      const messages = (payload.messages ?? []).map((message) => directMessageToChatMessage(message, member, selfIdentity));
+      setDmThreads((threads) =>
+        upsertDirectThread(threads, {
+          ...createEmptyDirectThread(member),
+          lastMessage: messages.at(-1)?.body ?? "Start a direct conversation",
+          messages
+        })
+      );
+    } catch (error) {
+      setMessagesLoading(false);
+      setMessageError(error instanceof Error ? error.message : "Unable to load direct messages.");
     }
-
-    const messages = (payload.messages ?? []).map((message) => directMessageToChatMessage(message, member, selfIdentity));
-    setDmThreads((threads) =>
-      upsertDirectThread(threads, {
-        ...createEmptyDirectThread(member),
-        lastMessage: messages.at(-1)?.body ?? "Start a direct conversation",
-        messages
-      })
-    );
   }
 
   function openDirectMessage(member: ChatManager) {
@@ -1383,35 +1417,40 @@ function ChatView({
       setSendingMessage(true);
       setMessageError("");
 
-      const response = await fetch("/api/chat/direct", {
-        body: JSON.stringify({
-          body,
-          recipientId: recipient.id
-        }),
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        method: "POST"
-      });
-      const payload = (await response.json()) as { error?: string; message?: ApiDirectMessage };
+      try {
+        const response = await fetch("/api/chat/direct", {
+          body: JSON.stringify({
+            body,
+            recipientId: recipient.id
+          }),
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          method: "POST"
+        });
+        const payload = await readJsonResponse<{ error?: string; message?: ApiDirectMessage }>(response);
 
-      setSendingMessage(false);
+        setSendingMessage(false);
 
-      if (!response.ok || !payload.message) {
-        setMessageError(payload.error ?? "Unable to send direct message.");
-        return;
+        if (!response.ok || !payload.message) {
+          setMessageError(payload.error ?? "Unable to send direct message.");
+          return;
+        }
+
+        const savedMessage = directMessageToChatMessage(payload.message, recipient, selfIdentity);
+        setDmThreads((threads) =>
+          upsertDirectThread(threads, {
+            ...activeDmThread,
+            lastMessage: savedMessage.body,
+            messages: [...activeDmThread.messages.filter((existing) => existing.id !== savedMessage.id), savedMessage],
+            unreadCount: 0
+          })
+        );
+      } catch (error) {
+        setSendingMessage(false);
+        setMessageError(error instanceof Error ? error.message : "Unable to send direct message.");
       }
-
-      const savedMessage = directMessageToChatMessage(payload.message, recipient, selfIdentity);
-      setDmThreads((threads) =>
-        upsertDirectThread(threads, {
-          ...activeDmThread,
-          lastMessage: savedMessage.body,
-          messages: [...activeDmThread.messages.filter((existing) => existing.id !== savedMessage.id), savedMessage],
-          unreadCount: 0
-        })
-      );
     }
 
     setDraft("");
@@ -2523,32 +2562,41 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
         return;
       }
 
-      const userResponse = await fetch("/api/admin/users", {
-        headers: {
-          Authorization: `Bearer ${token}`
+      try {
+        const userResponse = await fetch("/api/admin/users", {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (!isMounted) {
+          return;
         }
-      });
 
-      if (!isMounted) {
-        return;
+        setLoadingAdmin(false);
+
+        if (userResponse.status === 403) {
+          setIsAdmin(false);
+          return;
+        }
+
+        const userPayload = await readJsonResponse<{ error?: string; users?: AdminUser[] }>(userResponse);
+
+        if (!userResponse.ok) {
+          setAdminError(userPayload.error ?? "Unable to load admin users.");
+          return;
+        }
+
+        setIsAdmin(true);
+        setAdminUsers(userPayload.users ?? []);
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setLoadingAdmin(false);
+        setAdminError(error instanceof Error ? error.message : "Unable to load admin users.");
       }
-
-      setLoadingAdmin(false);
-
-      if (userResponse.status === 403) {
-        setIsAdmin(false);
-        return;
-      }
-
-      const userPayload = (await userResponse.json()) as { error?: string; users?: AdminUser[] };
-
-      if (!userResponse.ok) {
-        setAdminError(userPayload.error ?? "Unable to load admin users.");
-        return;
-      }
-
-      setIsAdmin(true);
-      setAdminUsers(userPayload.users ?? []);
     }
 
     void loadAdminUsers();
@@ -2575,25 +2623,30 @@ function AdminPanel({ supabase }: { supabase: BrowserSupabaseClient }) {
     setAdminError("");
     setAdminStatus("");
 
-    const response = await fetch(`/api/admin/users/${userId}/password`, {
-      body: JSON.stringify({ password }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      method: "PATCH"
-    });
-    const payload = (await response.json()) as { error?: string };
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/password`, {
+        body: JSON.stringify({ password }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        method: "PATCH"
+      });
+      const payload = await readJsonResponse<{ error?: string }>(response);
 
-    setSavingUserId(null);
+      setSavingUserId(null);
 
-    if (!response.ok) {
-      setAdminError(payload.error ?? "Unable to update password.");
-      return;
+      if (!response.ok) {
+        setAdminError(payload.error ?? "Unable to update password.");
+        return;
+      }
+
+      setPasswordsByUser((current) => ({ ...current, [userId]: "" }));
+      setAdminStatus("Password updated.");
+    } catch (error) {
+      setSavingUserId(null);
+      setAdminError(error instanceof Error ? error.message : "Unable to update password.");
     }
-
-    setPasswordsByUser((current) => ({ ...current, [userId]: "" }));
-    setAdminStatus("Password updated.");
   }
 
   if (loadingAdmin) {
@@ -3421,7 +3474,7 @@ function accountInitials(profile: Profile | null, user: User): string {
 }
 
 function getChatIdentity(profile: Profile | null, user: User) {
-  const metadataName = typeof user.user_metadata.display_name === "string" ? user.user_metadata.display_name.trim() : "";
+  const metadataName = typeof user.user_metadata?.display_name === "string" ? user.user_metadata.display_name.trim() : "";
   const displayName = profile?.display_name?.trim() || metadataName;
   const emailName = user.email?.split("@")[0] ?? "Manager";
   const manager = displayName || emailName;
