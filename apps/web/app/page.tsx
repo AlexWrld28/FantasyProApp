@@ -254,6 +254,7 @@ export default function HomePage() {
   const [authLoading, setAuthLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [passwordRecoveryMode, setPasswordRecoveryMode] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [rules, setRules] = useState<ScoringRules>(defaultScoringRules);
   const [rosterSnapshot, setRosterSnapshot] = useState<RosterSnapshot | null>(null);
@@ -271,6 +272,7 @@ export default function HomePage() {
   const selectedTeam = rosterTeams.find((team) => team.id === selectedTeamId) ?? rosterTeams[0] ?? null;
   const selectedStadium =
     stadiumMapEntries.find((stadium) => stadium.id === selectedStadiumId) ?? stadiumMapEntries[0];
+  const recoveryMode = passwordRecoveryMode;
   const matchup = useMemo(
     () => (rosterTeams.length >= 2 ? buildMatchup(rosterTeams[0], rosterTeams[1], rules) : null),
     [rules, rosterTeams]
@@ -315,8 +317,15 @@ export default function HomePage() {
       setAuthLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecoveryMode(true);
+      }
+
+      if (event === "SIGNED_OUT") {
+        setPasswordRecoveryMode(false);
+      }
     });
 
     return () => {
@@ -348,6 +357,25 @@ export default function HomePage() {
       isMounted = false;
     };
   }, [supabase, user]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "recovery") {
+      setPasswordRecoveryMode(true);
+    }
+  }, []);
+
+  const exitRecoveryMode = useCallback(() => {
+    setPasswordRecoveryMode(false);
+
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const refreshRosters = useCallback(async () => {
     if (!supabase || !user) {
@@ -423,6 +451,10 @@ export default function HomePage() {
         description="Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your local environment to enable account access."
       />
     );
+  }
+
+  if (recoveryMode) {
+    return <PasswordRecoveryView onExitRecovery={exitRecoveryMode} supabase={supabase} user={user} />;
   }
 
   if (!user) {
@@ -642,8 +674,12 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
     setSubmitting(true);
     setError("");
     setStatus("");
+    const redirectUrl = new URL(window.location.href);
+    redirectUrl.searchParams.set("mode", "recovery");
+    redirectUrl.hash = "";
+
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: window.location.origin
+      redirectTo: redirectUrl.toString()
     });
     setSubmitting(false);
 
@@ -652,7 +688,7 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
       return;
     }
 
-    setStatus("Password reset email sent.");
+    setStatus("Password reset email sent. Open the reset link to set a new password.");
   }
 
   return (
@@ -724,6 +760,128 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
               Send password reset
             </button>
           )}
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function PasswordRecoveryView({
+  onExitRecovery,
+  supabase,
+  user
+}: {
+  onExitRecovery: () => void;
+  supabase: BrowserSupabaseClient;
+  user: User | null;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submitNewPassword() {
+    const trimmedPassword = password.trim();
+
+    if (!trimmedPassword) {
+      setError("Enter a new password.");
+      return;
+    }
+
+    if (trimmedPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    if (trimmedPassword !== confirmPassword.trim()) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setStatus("");
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: trimmedPassword
+    });
+
+    setSubmitting(false);
+
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+
+    setPassword("");
+    setConfirmPassword("");
+    setStatus("Password updated. Returning you to the app.");
+    onExitRecovery();
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="brand auth-brand">
+          <div className="brand-mark">
+            <Trophy size={22} />
+          </div>
+          <div>
+            <p className="eyebrow">BAAL League</p>
+            <h1>Fantasy HQ</h1>
+          </div>
+        </div>
+
+        <div className="auth-copy">
+          <h2>Set a new password</h2>
+          <p>
+            {user?.email
+              ? `Resetting the password for ${user.email}.`
+              : "Open the password reset email, then set the new password here."}
+          </p>
+        </div>
+
+        <form
+          className="auth-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitNewPassword();
+          }}
+        >
+          <label className="form-field">
+            <span>New password</span>
+            <PasswordInput
+              autoComplete="new-password"
+              label="New password"
+              minLength={6}
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+
+          <label className="form-field">
+            <span>Confirm password</span>
+            <PasswordInput
+              autoComplete="new-password"
+              label="Confirm password"
+              minLength={6}
+              required
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </label>
+
+          {error && <p className="form-message error">{error}</p>}
+          {status && <p className="form-message success">{status}</p>}
+
+          <button className="primary-action auth-submit" disabled={submitting} type="submit">
+            {submitting ? "Updating..." : "Update password"}
+          </button>
+          <button className="text-button" disabled={submitting} onClick={onExitRecovery} type="button">
+            Back to sign in
+          </button>
         </form>
       </section>
     </main>
