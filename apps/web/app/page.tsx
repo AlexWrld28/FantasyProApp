@@ -26,7 +26,7 @@ import {
   Users,
   Zap
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentType } from "react";
 import type { User } from "@supabase/supabase-js";
 import {
   buildMatchup,
@@ -40,7 +40,9 @@ import {
 import { baalLegacyCapabilities } from "@baal/football-data";
 import { StadiumMap } from "../components/StadiumMap";
 import {
+  clearLocalSupabaseAuthSession,
   createRuntimeBrowserSupabaseClient,
+  isInvalidRefreshTokenError,
   type BrowserSupabaseClient
 } from "../lib/supabase";
 import { stadiumMapEntries, type StadiumMapEntry } from "../lib/stadium-data";
@@ -56,6 +58,7 @@ type ViewKey =
   | "roster-admin"
   | "settings";
 type ChatMode = "league" | "dm";
+type MobileMainView = "dashboard" | "standings" | "teams" | "chat" | "profile";
 type TradeMode = "win-now" | "balanced" | "keeper";
 type TradeVoteChoice = "approve" | "veto";
 type Presence = "online" | "away" | "offline";
@@ -248,10 +251,18 @@ const scoringInputs: Array<{ key: keyof ScoringRules; label: string; suffix: str
   { key: "pointsAllowedOver34", label: "PA 35+", suffix: "pts" }
 ];
 
+const authRedirectBaseUrlCandidates = [
+  process.env.NEXT_PUBLIC_SITE_URL,
+  process.env.NEXT_PUBLIC_APP_URL,
+  process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL,
+  process.env.NEXT_PUBLIC_VERCEL_URL
+];
+
 export default function HomePage() {
   const [supabase, setSupabase] = useState<BrowserSupabaseClient | null>(null);
   const [configResolved, setConfigResolved] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authBootstrapError, setAuthBootstrapError] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [passwordRecoveryMode, setPasswordRecoveryMode] = useState(false);
@@ -261,6 +272,7 @@ export default function HomePage() {
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [mobileView, setMobileView] = useState<MobileMainView>("dashboard");
   const [selectedStadiumId, setSelectedStadiumId] = useState(stadiumMapEntries[0].id);
   const [yourTradeTeamId, setYourTradeTeamId] = useState("");
   const [partnerTradeTeamId, setPartnerTradeTeamId] = useState("");
@@ -308,14 +320,55 @@ export default function HomePage() {
 
     let isMounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!isMounted) {
-        return;
-      }
+    supabase.auth
+      .getSession()
+      .then(async ({ data, error }) => {
+        if (!isMounted) {
+          return;
+        }
 
-      setUser(data.session?.user ?? null);
-      setAuthLoading(false);
-    });
+        if (error) {
+          if (isInvalidRefreshTokenError(error)) {
+            await clearLocalSupabaseAuthSession(supabase);
+            if (!isMounted) {
+              return;
+            }
+
+            setAuthBootstrapError("Your saved login expired. Sign in again.");
+          } else {
+            setAuthBootstrapError(authRequestErrorMessage(error));
+          }
+
+          setUser(null);
+          setAuthLoading(false);
+          return;
+        }
+
+        setAuthBootstrapError("");
+        setUser(data.session?.user ?? null);
+        setAuthLoading(false);
+      })
+      .catch(async (error) => {
+        if (!isMounted) {
+          return;
+        }
+
+        if (isInvalidRefreshTokenError(error)) {
+          await clearLocalSupabaseAuthSession(supabase);
+          if (!isMounted) {
+            return;
+          }
+
+          setAuthBootstrapError("Your saved login expired. Sign in again.");
+          setUser(null);
+          setAuthLoading(false);
+          return;
+        }
+
+        setAuthBootstrapError(authRequestErrorMessage(error));
+        setUser(null);
+        setAuthLoading(false);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
@@ -458,148 +511,665 @@ export default function HomePage() {
   }
 
   if (!user) {
-    return <AuthView supabase={supabase} />;
+    return <AuthView authError={authBootstrapError} supabase={supabase} />;
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">
-            <Trophy size={22} />
-          </div>
-          <div>
-            <p className="eyebrow">BAAL League</p>
-            <h1>Fantasy HQ</h1>
-          </div>
-        </div>
-
-        <nav className="nav-list" aria-label="Primary">
-          {views.map((view) => {
-            const Icon = view.icon;
-            return (
-              <button
-                className={activeView === view.key ? "nav-item active" : "nav-item"}
-                key={view.key}
-                onClick={() => setActiveView(view.key)}
-                type="button"
-              >
-                <Icon size={18} />
-                <span>{view.label}</span>
-                {view.key === "chat" && <b className="nav-badge">3</b>}
-                {view.key === "trade" && <b className="nav-badge hot">AI</b>}
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="engine-panel">
-          <div className="panel-heading">
-            <Zap size={16} />
-            <span>BAAL Engine</span>
-          </div>
-          {baalLegacyCapabilities.slice(0, 4).map((capability) => (
-            <div className="capability" key={capability}>
-              <Check size={14} />
-              <span>{capability}</span>
+    <>
+      <div className="hidden md:block">
+        <main className="app-shell">
+          <aside className="sidebar">
+            <div className="brand">
+              <div className="brand-mark">
+                <Trophy size={22} />
+              </div>
+              <div>
+                <p className="eyebrow">BAAL League</p>
+                <h1>Fantasy HQ</h1>
+              </div>
             </div>
-          ))}
-        </div>
-      </aside>
 
-      <section className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow live-eyebrow">
-              <span className="live-dot" />
-              Week 12 Live Board
-            </p>
-            <h2>{viewTitle(activeView)}</h2>
-          </div>
-          <div className="topbar-actions">
-            <div className="account-chip">
-              <Avatar initials={accountInitials(profile, user)} />
-              <span>
-                <strong>{profile?.display_name || user.email || "Manager"}</strong>
-                <small>Signed in</small>
-              </span>
+            <nav className="nav-list" aria-label="Primary">
+              {views.map((view) => {
+                const Icon = view.icon;
+                return (
+                  <button
+                    className={activeView === view.key ? "nav-item active" : "nav-item"}
+                    key={view.key}
+                    onClick={() => setActiveView(view.key)}
+                    type="button"
+                  >
+                    <Icon size={18} />
+                    <span>{view.label}</span>
+                    {view.key === "chat" && <b className="nav-badge">3</b>}
+                    {view.key === "trade" && <b className="nav-badge hot">AI</b>}
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div className="engine-panel">
+              <div className="panel-heading">
+                <Zap size={16} />
+                <span>BAAL Engine</span>
+              </div>
+              {baalLegacyCapabilities.slice(0, 4).map((capability) => (
+                <div className="capability" key={capability}>
+                  <Check size={14} />
+                  <span>{capability}</span>
+                </div>
+              ))}
             </div>
-            <button className="icon-button" type="button" aria-label="League lock">
-              <Lock size={18} />
-            </button>
-            <button className="primary-action" type="button">
-              <Users size={17} />
-              Invite
-            </button>
-          </div>
-        </header>
+          </aside>
 
-        <SportsTicker />
+          <section className="workspace">
+            <header className="topbar">
+              <div>
+                <p className="eyebrow live-eyebrow">
+                  <span className="live-dot" />
+                  Week 12 Live Board
+                </p>
+                <h2>{viewTitle(activeView)}</h2>
+              </div>
+              <div className="topbar-actions">
+                <div className="account-chip">
+                  <Avatar initials={accountInitials(profile, user)} />
+                  <span>
+                    <strong>{profile?.display_name || user.email || "Manager"}</strong>
+                    <small>Signed in</small>
+                  </span>
+                </div>
+                <button className="icon-button" type="button" aria-label="League lock">
+                  <Lock size={18} />
+                </button>
+                <button className="primary-action" type="button">
+                  <Users size={17} />
+                  Invite
+                </button>
+              </div>
+            </header>
 
+            <SportsTicker />
+
+            {activeView === "dashboard" && (
+              <DashboardView matchup={matchup} rosterError={rosterError} rosterLoading={rosterLoading} teams={rosterTeams} />
+            )}
+            {activeView === "scoring" && <ScoringView matchup={matchup} rosterError={rosterError} rosterLoading={rosterLoading} />}
+            {activeView === "rosters" && (
+              <RostersView
+                rosterError={rosterError}
+                rosterLoading={rosterLoading}
+                selectedScore={selectedScore}
+                selectedTeamId={selectedTeamId}
+                setSelectedTeamId={setSelectedTeamId}
+                teams={rosterTeams}
+              />
+            )}
+            {activeView === "free-agency" && (
+              <FreeAgencyView
+                freeAgents={rosterSnapshot?.freeAgents ?? []}
+                rosterError={rosterError}
+                rosterLoading={rosterLoading}
+                setRosterError={setRosterError}
+                setRosterSnapshot={setRosterSnapshot}
+                supabase={supabase}
+                teams={rosterTeams}
+                user={user}
+              />
+            )}
+            {activeView === "chat" && <ChatView profile={profile} supabase={supabase} user={user} />}
+            {activeView === "trade" && (
+              <TradeBuilderView
+                partnerTradeTeamId={partnerTradeTeamId}
+                rosterError={rosterError}
+                rosterLoading={rosterLoading}
+                refreshRosters={refreshRosters}
+                supabase={supabase}
+                setPartnerTradeTeamId={setPartnerTradeTeamId}
+                setYourTradeTeamId={setYourTradeTeamId}
+                teams={rosterTeams}
+                user={user}
+                yourTradeTeamId={yourTradeTeamId}
+              />
+            )}
+            {activeView === "map" && (
+              <MapView selectedStadium={selectedStadium} setSelectedStadiumId={setSelectedStadiumId} />
+            )}
+            {activeView === "roster-admin" && <RosterAdminView supabase={supabase} />}
+            {activeView === "settings" && (
+              <SettingsView
+                pprEnabled={pprEnabled}
+                rules={rules}
+                tradeReview={tradeReview}
+                updateRule={updateRule}
+                waiverLock={waiverLock}
+                setPpr={setPpr}
+                setTradeReview={setTradeReview}
+                setWaiverLock={setWaiverLock}
+                supabase={supabase}
+                user={user}
+                profile={profile}
+                setProfile={setProfile}
+              />
+            )}
+          </section>
+        </main>
+      </div>
+
+      <div className="block md:hidden">
+        <MobileFantasyShell
+          activeView={mobileView}
+          matchup={matchup}
+          profile={profile}
+          rosterError={rosterError}
+          rosterLoading={rosterLoading}
+          selectedScore={selectedScore}
+          selectedTeamId={selectedTeamId}
+          rules={rules}
+          setActiveView={setMobileView}
+          setSelectedTeamId={setSelectedTeamId}
+          supabase={supabase}
+          teams={rosterTeams}
+          user={user}
+        />
+      </div>
+    </>
+  );
+}
+
+function MobileFantasyShell({
+  activeView,
+  matchup,
+  profile,
+  rosterError,
+  rosterLoading,
+  rules,
+  selectedScore,
+  selectedTeamId,
+  setActiveView,
+  setSelectedTeamId,
+  supabase,
+  teams,
+  user
+}: {
+  activeView: MobileMainView;
+  matchup: ReturnType<typeof buildMatchup> | null;
+  profile: Profile | null;
+  rosterError: string;
+  rosterLoading: boolean;
+  rules: ScoringRules;
+  selectedScore: ReturnType<typeof scoreTeam> | null;
+  selectedTeamId: string;
+  setActiveView: (view: MobileMainView) => void;
+  setSelectedTeamId: (teamId: string) => void;
+  supabase: BrowserSupabaseClient;
+  teams: RosterTeam[];
+  user: User;
+}) {
+  const rankings = useMemo(() => buildMobileRankings(teams, rules), [rules, teams]);
+  const selectedRanking =
+    rankings.find(({ team }) => team.id === selectedTeamId) ?? rankings[0] ?? null;
+
+  return (
+    <main className="mobile-fantasy-shell">
+      <header className="mobile-sticky-header">
+        <div>
+          <p className="mobile-kicker">Week 12 Live Board</p>
+          <h1>Fantasy HQ</h1>
+        </div>
+        <button className="mobile-profile-chip" onClick={() => setActiveView("profile")} type="button">
+          <Avatar initials={accountInitials(profile, user)} />
+        </button>
+      </header>
+
+      <section className="mobile-content" aria-live="polite">
         {activeView === "dashboard" && (
-          <DashboardView matchup={matchup} rosterError={rosterError} rosterLoading={rosterLoading} teams={rosterTeams} />
-        )}
-        {activeView === "scoring" && <ScoringView matchup={matchup} rosterError={rosterError} rosterLoading={rosterLoading} />}
-        {activeView === "rosters" && (
-          <RostersView
+          <MobileDashboard
+            matchup={matchup}
+            rankings={rankings}
             rosterError={rosterError}
             rosterLoading={rosterLoading}
+            setActiveView={setActiveView}
+            teams={teams}
+          />
+        )}
+        {activeView === "standings" && (
+          <MobileStandings rankings={rankings} rosterError={rosterError} rosterLoading={rosterLoading} />
+        )}
+        {activeView === "teams" && (
+          <MobileTeamCardList
+            rankings={rankings}
+            rosterError={rosterError}
+            rosterLoading={rosterLoading}
+            selectedRanking={selectedRanking}
             selectedScore={selectedScore}
             selectedTeamId={selectedTeamId}
             setSelectedTeamId={setSelectedTeamId}
-            teams={rosterTeams}
           />
         )}
-        {activeView === "free-agency" && (
-          <FreeAgencyView
-            freeAgents={rosterSnapshot?.freeAgents ?? []}
-            rosterError={rosterError}
-            rosterLoading={rosterLoading}
-            setRosterError={setRosterError}
-            setRosterSnapshot={setRosterSnapshot}
-            supabase={supabase}
-            teams={rosterTeams}
-            user={user}
-          />
+        {activeView === "chat" && (
+          <MobileChat profile={profile} teams={teams} user={user} />
         )}
-        {activeView === "chat" && <ChatView profile={profile} supabase={supabase} user={user} />}
-        {activeView === "trade" && (
-          <TradeBuilderView
-            partnerTradeTeamId={partnerTradeTeamId}
-            rosterError={rosterError}
-            rosterLoading={rosterLoading}
-            refreshRosters={refreshRosters}
-            supabase={supabase}
-            setPartnerTradeTeamId={setPartnerTradeTeamId}
-            setYourTradeTeamId={setYourTradeTeamId}
-            teams={rosterTeams}
-            user={user}
-            yourTradeTeamId={yourTradeTeamId}
-          />
-        )}
-        {activeView === "map" && (
-          <MapView selectedStadium={selectedStadium} setSelectedStadiumId={setSelectedStadiumId} />
-        )}
-        {activeView === "roster-admin" && <RosterAdminView supabase={supabase} />}
-        {activeView === "settings" && (
-          <SettingsView
-            pprEnabled={pprEnabled}
-            rules={rules}
-            tradeReview={tradeReview}
-            updateRule={updateRule}
-            waiverLock={waiverLock}
-            setPpr={setPpr}
-            setTradeReview={setTradeReview}
-            setWaiverLock={setWaiverLock}
-            supabase={supabase}
-            user={user}
+        {activeView === "profile" && (
+          <MobileProfile
             profile={profile}
-            setProfile={setProfile}
+            selectedRanking={selectedRanking}
+            supabase={supabase}
+            user={user}
           />
         )}
       </section>
+
+      <MobileBottomNav activeView={activeView} setActiveView={setActiveView} />
     </main>
   );
+}
+
+function MobileDashboard({
+  matchup,
+  rankings,
+  rosterError,
+  rosterLoading,
+  setActiveView,
+  teams
+}: {
+  matchup: ReturnType<typeof buildMatchup> | null;
+  rankings: MobileTeamRanking[];
+  rosterError: string;
+  rosterLoading: boolean;
+  setActiveView: (view: MobileMainView) => void;
+  teams: RosterTeam[];
+}) {
+  const totalRostered = teams.reduce((sum, team) => sum + team.roster.length, 0);
+  const leader = rankings[0];
+
+  return (
+    <div className="mobile-view-stack">
+      <section className="mobile-hero-card">
+        <p className="mobile-kicker">League Home</p>
+        <h2>{matchup ? `${matchup.home.team.name} vs ${matchup.away.team.name}` : "Real rosters pending"}</h2>
+        {matchup ? (
+          <div className="mobile-score-pair">
+            <MobileScorePill label={matchup.home.team.manager} value={matchup.home.actualPoints} />
+            <MobileScorePill label={matchup.away.team.manager} value={matchup.away.actualPoints} />
+          </div>
+        ) : (
+          <p className="mobile-muted-copy">
+            {rosterLoading ? "Syncing Supabase rosters..." : rosterError || "Assign players to activate live scoring."}
+          </p>
+        )}
+      </section>
+
+      <section className="mobile-card-grid">
+        <button className="mobile-action-card" onClick={() => setActiveView("standings")} type="button">
+          <Trophy size={20} />
+          <span>
+            <small>Standings</small>
+            <strong>{leader ? leader.team.name : "No teams yet"}</strong>
+            <em>{leader ? `${leader.score.actualPoints.toFixed(1)} live pts` : "Waiting for rosters"}</em>
+          </span>
+        </button>
+        <button className="mobile-action-card" onClick={() => setActiveView("teams")} type="button">
+          <Users size={20} />
+          <span>
+            <small>Teams</small>
+            <strong>{teams.length} managers</strong>
+            <em>{totalRostered} rostered players</em>
+          </span>
+        </button>
+        <button className="mobile-action-card" onClick={() => setActiveView("chat")} type="button">
+          <MessageCircle size={20} />
+          <span>
+            <small>Chat</small>
+            <strong>League message board</strong>
+            <em>Trade talk and weekly notes</em>
+          </span>
+        </button>
+      </section>
+
+      <section className="mobile-panel">
+        <MobileSectionTitle eyebrow="Activity" title="League pulse" />
+        <div className="mobile-activity-list">
+          {rankings.slice(0, 3).map(({ rank, score, team }) => (
+            <div className="mobile-activity-row" key={team.id}>
+              <span>#{rank}</span>
+              <strong>{team.name}</strong>
+              <small>{team.manager} | {formatPoints(score.actualPoints)} pts</small>
+            </div>
+          ))}
+          {!rankings.length && <p className="mobile-empty-state">Roster activity appears after real users load.</p>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MobileStandings({
+  rankings,
+  rosterError,
+  rosterLoading
+}: {
+  rankings: MobileTeamRanking[];
+  rosterError: string;
+  rosterLoading: boolean;
+}) {
+  return (
+    <div className="mobile-view-stack">
+      <section className="mobile-panel">
+        <MobileSectionTitle eyebrow="Power rankings" title="Standings" />
+        <div className="mobile-standings-list">
+          {rankings.map(({ rank, score, team }) => (
+            <article className="mobile-standing-card" key={team.id}>
+              <span className="mobile-rank-number">{rank}</span>
+              <div>
+                <strong>{team.name}</strong>
+                <small>{team.manager} | {team.record}</small>
+              </div>
+              <div className="mobile-rank-score">
+                <strong>{formatPoints(score.actualPoints)}</strong>
+                <small>{formatPoints(score.projectedPoints)} proj</small>
+              </div>
+            </article>
+          ))}
+          {!rankings.length && (
+            <p className="mobile-empty-state">
+              {rosterLoading ? "Loading real Supabase rosters..." : rosterError || "No real rosters are available yet."}
+            </p>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MobileTeamCardList({
+  rankings,
+  rosterError,
+  rosterLoading,
+  selectedRanking,
+  selectedScore,
+  selectedTeamId,
+  setSelectedTeamId
+}: {
+  rankings: MobileTeamRanking[];
+  rosterError: string;
+  rosterLoading: boolean;
+  selectedRanking: MobileTeamRanking | null;
+  selectedScore: ReturnType<typeof scoreTeam> | null;
+  selectedTeamId: string;
+  setSelectedTeamId: (teamId: string) => void;
+}) {
+  const activeScore = selectedRanking?.score ?? selectedScore;
+  const activeTeam = selectedRanking?.team ?? selectedScore?.team ?? null;
+
+  return (
+    <div className="mobile-view-stack">
+      <section className="mobile-team-carousel" aria-label="Teams">
+        {rankings.map(({ rank, team }) => (
+          <button
+            className={team.id === selectedTeamId ? "mobile-team-pill active" : "mobile-team-pill"}
+            key={team.id}
+            onClick={() => setSelectedTeamId(team.id)}
+            type="button"
+          >
+            <span>#{rank}</span>
+            <strong>{team.name}</strong>
+          </button>
+        ))}
+      </section>
+
+      <section className="mobile-panel">
+        <MobileSectionTitle eyebrow="Team detail" title={activeTeam?.name ?? "Rosters"} />
+        {activeTeam && activeScore ? (
+          <>
+            <div className="mobile-team-summary">
+              <MobileMetric label="Manager" value={activeTeam.manager} />
+              <MobileMetric label="Record" value={activeTeam.record} />
+              <MobileMetric label="FAAB" value={`$${activeTeam.faabRemaining}`} />
+              <MobileMetric label="Projected" value={formatPoints(activeScore.projectedPoints)} />
+            </div>
+            <div className="mobile-roster-list">
+              {activeTeam.roster.map((player) => (
+                <article className="mobile-player-card" key={player.id}>
+                  <span className="mobile-position-chip">{player.rosterSlot}</span>
+                  <div>
+                    <strong>{player.name}</strong>
+                    <small>{player.position} | {player.team} vs {player.opponent}</small>
+                  </div>
+                  <b>{formatPoints(player.projectedPoints)}</b>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="mobile-empty-state">
+            {rosterLoading ? "Loading real Supabase rosters..." : rosterError || "No roster selected yet."}
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function MobileChat({ profile, teams, user }: { profile: Profile | null; teams: RosterTeam[]; user: User }) {
+  const identity = getChatIdentity(profile, user);
+  const [draft, setDraft] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      author: "Commissioner",
+      body: "Waivers lock tonight. Check your bench before kickoff.",
+      id: "mobile-league-1",
+      initials: "CO",
+      sentAt: "8:12 AM",
+      tag: "commissioner",
+      team: "League Office"
+    },
+    {
+      author: teams[0]?.manager ?? "League Manager",
+      body: teams[0] ? `${teams[0].name} is open to playoff-depth trade talks.` : "Roster sync will populate manager messages.",
+      id: "mobile-league-2",
+      initials: (teams[0]?.manager?.[0] ?? "M").toUpperCase(),
+      sentAt: "9:35 AM",
+      team: teams[0]?.name ?? "Fantasy HQ"
+    }
+  ]);
+
+  function sendMobileMessage() {
+    const body = draft.trim();
+    if (!body) {
+      return;
+    }
+
+    setMessages((current) => [
+      ...current,
+      {
+        author: identity.manager,
+        body,
+        id: `mobile-message-${Date.now()}`,
+        initials: identity.initials,
+        isSelf: true,
+        sentAt: "Now",
+        team: identity.team
+      }
+    ]);
+    setDraft("");
+  }
+
+  return (
+    <div className="mobile-chat-view">
+      <section className="mobile-panel">
+        <MobileSectionTitle eyebrow="League chat" title="Message board" />
+        <div className="mobile-message-list">
+          {messages.map((message) => (
+            <article className={message.isSelf ? "mobile-message-card self" : "mobile-message-card"} key={message.id}>
+              <div className="mobile-message-meta">
+                <span>{message.initials}</span>
+                <div>
+                  <strong>{message.author}</strong>
+                  <small>{message.team} | {message.sentAt}</small>
+                </div>
+              </div>
+              <p>{message.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+      <form
+        className="mobile-message-composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          sendMobileMessage();
+        }}
+      >
+        <input
+          aria-label="Message the league"
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Message the league"
+          value={draft}
+        />
+        <button aria-label="Send message" type="submit">
+          <Send size={18} />
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function MobileProfile({
+  profile,
+  selectedRanking,
+  supabase,
+  user
+}: {
+  profile: Profile | null;
+  selectedRanking: MobileTeamRanking | null;
+  supabase: BrowserSupabaseClient;
+  user: User;
+}) {
+  const displayName = profile?.display_name || user.email || "Manager";
+
+  return (
+    <div className="mobile-view-stack">
+      <section className="mobile-profile-panel">
+        <Avatar initials={accountInitials(profile, user)} />
+        <div>
+          <p className="mobile-kicker">Signed in</p>
+          <h2>{displayName}</h2>
+          <span>{selectedRanking?.team.name ?? "No team assigned yet"}</span>
+        </div>
+      </section>
+      <section className="mobile-panel">
+        <MobileSectionTitle eyebrow="Quick settings" title="Account" />
+        <div className="mobile-activity-list">
+          <div className="mobile-activity-row">
+            <span>Email</span>
+            <strong>{user.email ?? "Unknown"}</strong>
+          </div>
+          <div className="mobile-activity-row">
+            <span>Install</span>
+            <strong>Use browser share menu to add to home screen</strong>
+          </div>
+        </div>
+        <button className="mobile-logout-button" onClick={() => void supabase.auth.signOut()} type="button">
+          Log out
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function MobileBottomNav({
+  activeView,
+  setActiveView
+}: {
+  activeView: MobileMainView;
+  setActiveView: (view: MobileMainView) => void;
+}) {
+  const mobileTabs: Array<{
+    icon: ComponentType<{ size?: number }>;
+    key: MobileMainView;
+    label: string;
+  }> = [
+    { icon: Home, key: "dashboard", label: "Home" },
+    { icon: Trophy, key: "standings", label: "Standings" },
+    { icon: Users, key: "teams", label: "Teams" },
+    { icon: MessageCircle, key: "chat", label: "Chat" },
+    { icon: Settings, key: "profile", label: "Profile" }
+  ];
+
+  return (
+    <nav className="mobile-bottom-nav" aria-label="Mobile primary">
+      {mobileTabs.map(({ icon: Icon, key, label }) => (
+        <button
+          className={activeView === key ? "active" : ""}
+          key={key}
+          onClick={() => setActiveView(key)}
+          type="button"
+        >
+          <Icon size={19} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function MobileSectionTitle({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return (
+    <div className="mobile-section-title">
+      <p className="mobile-kicker">{eyebrow}</p>
+      <h2>{title}</h2>
+    </div>
+  );
+}
+
+function MobileScorePill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="mobile-score-pill">
+      <span>{label}</span>
+      <strong>{formatPoints(value)}</strong>
+    </div>
+  );
+}
+
+function MobileMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="mobile-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+type MobileTeamRanking = {
+  rank: number;
+  score: ReturnType<typeof scoreTeam>;
+  team: RosterTeam;
+};
+
+function buildMobileRankings(teams: RosterTeam[], rules: ScoringRules): MobileTeamRanking[] {
+  return teams
+    .map((team) => ({
+      score: scoreTeam(team, rules),
+      team
+    }))
+    .sort((first, second) => {
+      const recordDelta = recordSortValue(second.team.record) - recordSortValue(first.team.record);
+      if (recordDelta !== 0) {
+        return recordDelta;
+      }
+
+      return second.score.actualPoints - first.score.actualPoints;
+    })
+    .map((ranking, index) => ({
+      ...ranking,
+      rank: index + 1
+    }));
+}
+
+function recordSortValue(record: string): number {
+  const [wins = 0, losses = 0] = record.split("-").map((value) => Number(value));
+  return (Number.isFinite(wins) ? wins : 0) * 100 - (Number.isFinite(losses) ? losses : 0);
 }
 
 function AuthShell({ description, title }: { description: string; title: string }) {
@@ -624,7 +1194,7 @@ function AuthShell({ description, title }: { description: string; title: string 
   );
 }
 
-function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
+function AuthView({ authError, supabase }: { authError?: string; supabase: BrowserSupabaseClient }) {
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -638,29 +1208,36 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
     setError("");
     setStatus("");
 
-    const trimmedEmail = email.trim();
-    const authResult =
-      mode === "sign-in"
-        ? await supabase.auth.signInWithPassword({ email: trimmedEmail, password })
-        : await supabase.auth.signUp({
-            email: trimmedEmail,
-            password,
-            options: {
-              data: {
-                display_name: displayName.trim() || trimmedEmail.split("@")[0]
+    try {
+      const trimmedEmail = email.trim();
+      const authRedirectUrl = buildAuthRedirectUrl();
+      const authResult =
+        mode === "sign-in"
+          ? await supabase.auth.signInWithPassword({ email: trimmedEmail, password })
+          : await supabase.auth.signUp({
+              email: trimmedEmail,
+              password,
+              options: {
+                emailRedirectTo: authRedirectUrl,
+                data: {
+                  display_name: displayName.trim() || trimmedEmail.split("@")[0]
+                }
               }
-            }
-          });
+            });
 
-    setSubmitting(false);
+      setSubmitting(false);
 
-    if (authResult.error) {
-      setError(authResult.error.message);
-      return;
-    }
+      if (authResult.error) {
+        setError(authResult.error.message);
+        return;
+      }
 
-    if (mode === "sign-up" && !authResult.data.session) {
-      setStatus("Check your email to confirm the account, then sign in.");
+      if (mode === "sign-up" && !authResult.data.session) {
+        setStatus("Check your email to confirm the account, then sign in.");
+      }
+    } catch (authRequestError) {
+      setSubmitting(false);
+      setError(authRequestErrorMessage(authRequestError));
     }
   }
 
@@ -674,21 +1251,25 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
     setSubmitting(true);
     setError("");
     setStatus("");
-    const redirectUrl = new URL(window.location.href);
-    redirectUrl.searchParams.set("mode", "recovery");
-    redirectUrl.hash = "";
+    const resetRedirectUrl = buildAuthRedirectUrl({ mode: "recovery" });
 
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: redirectUrl.toString()
-    });
-    setSubmitting(false);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        trimmedEmail,
+        resetRedirectUrl ? { redirectTo: resetRedirectUrl } : undefined
+      );
+      setSubmitting(false);
 
-    if (resetError) {
-      setError(resetError.message);
-      return;
+      if (resetError) {
+        setError(resetError.message);
+        return;
+      }
+
+      setStatus("Password reset email sent. Open the reset link to set a new password.");
+    } catch (resetRequestError) {
+      setSubmitting(false);
+      setError(authRequestErrorMessage(resetRequestError));
     }
-
-    setStatus("Password reset email sent. Open the reset link to set a new password.");
   }
 
   return (
@@ -750,6 +1331,7 @@ function AuthView({ supabase }: { supabase: BrowserSupabaseClient }) {
           </label>
 
           {error && <p className="form-message error">{error}</p>}
+          {!error && authError && <p className="form-message error">{authError}</p>}
           {status && <p className="form-message success">{status}</p>}
 
           <button className="primary-action auth-submit" disabled={submitting} type="submit">
@@ -803,21 +1385,26 @@ function PasswordRecoveryView({
     setError("");
     setStatus("");
 
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: trimmedPassword
-    });
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: trimmedPassword
+      });
 
-    setSubmitting(false);
+      setSubmitting(false);
 
-    if (updateError) {
-      setError(updateError.message);
-      return;
+      if (updateError) {
+        setError(updateError.message);
+        return;
+      }
+
+      setPassword("");
+      setConfirmPassword("");
+      setStatus("Password updated. Returning you to the app.");
+      onExitRecovery();
+    } catch (updateRequestError) {
+      setSubmitting(false);
+      setError(authRequestErrorMessage(updateRequestError));
     }
-
-    setPassword("");
-    setConfirmPassword("");
-    setStatus("Password updated. Returning you to the app.");
-    onExitRecovery();
   }
 
   return (
@@ -2595,16 +3182,21 @@ function SettingsView({
       return;
     }
 
-    const { error } = await supabase.auth.updateUser(updates);
-    setSavingAccount(false);
+    try {
+      const { error } = await supabase.auth.updateUser(updates);
+      setSavingAccount(false);
 
-    if (error) {
-      setAccountError(error.message);
-      return;
+      if (error) {
+        setAccountError(error.message);
+        return;
+      }
+
+      setPassword("");
+      setAccountStatus(updates.email ? "Login updated. Confirm the new email if Supabase requires it." : "Password updated.");
+    } catch (updateRequestError) {
+      setSavingAccount(false);
+      setAccountError(authRequestErrorMessage(updateRequestError));
     }
-
-    setPassword("");
-    setAccountStatus(updates.email ? "Login updated. Confirm the new email if Supabase requires it." : "Password updated.");
   }
 
   return (
@@ -3645,8 +4237,78 @@ function getChatIdentity(profile: Profile | null, user: User) {
 }
 
 async function getAccessToken(supabase: BrowserSupabaseClient): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token ?? null;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      if (isInvalidRefreshTokenError(error)) {
+        await clearLocalSupabaseAuthSession(supabase);
+      }
+
+      return null;
+    }
+
+    return data.session?.access_token ?? null;
+  } catch (error) {
+    if (isInvalidRefreshTokenError(error)) {
+      await clearLocalSupabaseAuthSession(supabase);
+    }
+
+    return null;
+  }
+}
+
+function buildAuthRedirectUrl(options: { mode?: string } = {}): string | undefined {
+  const baseUrl = getAuthRedirectBaseUrl();
+  if (!baseUrl) {
+    return undefined;
+  }
+
+  const redirectUrl = new URL("/", baseUrl);
+  if (options.mode) {
+    redirectUrl.searchParams.set("mode", options.mode);
+  }
+
+  return redirectUrl.toString();
+}
+
+function getAuthRedirectBaseUrl(): string | undefined {
+  for (const candidate of authRedirectBaseUrlCandidates) {
+    const normalizedUrl = normalizeAuthRedirectBaseUrl(candidate);
+    if (normalizedUrl) {
+      return normalizedUrl;
+    }
+  }
+
+  if (typeof window !== "undefined" && window.location.origin) {
+    return normalizeAuthRedirectBaseUrl(window.location.origin);
+  }
+
+  return undefined;
+}
+
+function normalizeAuthRedirectBaseUrl(value: string | undefined): string | undefined {
+  const cleaned = value?.trim();
+  if (!cleaned) {
+    return undefined;
+  }
+
+  const urlWithProtocol = /^https?:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`;
+
+  try {
+    const url = new URL(urlWithProtocol);
+    return `${url.origin}/`;
+  } catch {
+    return undefined;
+  }
+}
+
+function authRequestErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  if (/load failed|failed to fetch|networkerror|fetch/i.test(message)) {
+    return "Unable to reach Supabase Auth. Check your internet connection, DNS, and Supabase project URL.";
+  }
+
+  return message || "Unable to reach Supabase Auth.";
 }
 
 async function readJsonResponse<T>(response: Response): Promise<T> {

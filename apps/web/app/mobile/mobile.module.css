@@ -1,0 +1,798 @@
+.mobileApp {
+  background:
+    linear-gradient(180deg, rgba(6, 14, 22, 0.42), rgba(6, 14, 22, 0.98)),
+    url("https://images.unsplash.com/photo-1566577739112-5180d4bf9390?auto=format&fit=crop&w=1400&q=80");
+  background-attachment: fixed;
+  background-position: center;
+  background-size: cover;
+  color: #f7fbf6;
+  min-height: 100svh;
+  overflow-x: hidden;
+}
+
+.mobileApp button,
+.mobileApp input {
+  font: inherit;
+}
+
+.landingShell,
+.phoneShell {
+  margin: 0 auto;
+  max-width: 480px;
+  min-height: 100svh;
+  position: relative;
+}
+
+.landingShell {
+  align-content: end;
+  display: grid;
+  gap: 20px;
+  overflow: hidden;
+  padding: 28px 18px 34px;
+}
+
+.landingShell::before,
+.phoneShell::before {
+  background:
+    linear-gradient(180deg, rgba(15, 27, 42, 0.82), rgba(8, 16, 25, 0.96)),
+    repeating-linear-gradient(90deg, rgba(137, 227, 136, 0.08) 0 1px, transparent 1px 58px);
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.landingShell > *,
+.phoneShell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.heroArtwork {
+  align-items: end;
+  display: grid;
+  height: 31svh;
+  margin: -12px -18px 0;
+  min-height: 220px;
+  overflow: hidden;
+  padding: 0 18px 18px;
+}
+
+.field {
+  background:
+    linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, 0.44) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.28) 0 1px, transparent 1px 42px),
+    linear-gradient(135deg, rgba(21, 93, 57, 0.86), rgba(31, 122, 79, 0.72));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(3, 8, 14, 0.42);
+  display: grid;
+  gap: 14px;
+  height: 172px;
+  padding: 18px;
+  transform: perspective(640px) rotateX(58deg) translateY(24px);
+  transform-origin: bottom center;
+}
+
+.field span {
+  border-top: 1px solid rgba(255, 255, 255, 0.34);
+  display: block;
+}
+
+.brandLockup {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.brandLockup p,
+.brandLockup h1,
+.landingCopy h2,
+.landingCopy p,
+.scoreHero h2,
+.scoreHero p,
+.panelTitle h2,
+.teamHero h2,
+.teamHero p,
+.profileCard h2,
+.profileCard p {
+  margin: 0;
+}
+
+.logoMark {
+  align-items: center;
+  background: #f5c65b;
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 10px 22px rgba(245, 198, 91, 0.22);
+  color: #102014;
+  display: grid;
+  height: 54px;
+  justify-items: center;
+  width: 54px;
+}
+
+.brandLockup p,
+.kicker {
+  color: #b7ff5a;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.brandLockup h1 {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.landingCopy {
+  display: grid;
+  gap: 11px;
+}
+
+.landingCopy h2 {
+  color: #fff;
+  font-size: 36px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.landingCopy p:not(.kicker) {
+  color: #d7e5d8;
+  font-size: 15px;
+  line-height: 1.48;
+}
+
+.landingActions {
+  display: grid;
+  gap: 10px;
+}
+
+.primaryButton,
+.secondaryButton,
+.logoutButton,
+.backButton {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font-weight: 950;
+  gap: 9px;
+  justify-content: center;
+  min-height: 50px;
+  text-decoration: none;
+}
+
+.primaryButton {
+  background: #b7ff5a;
+  border: 0;
+  box-shadow: 0 6px 0 rgba(70, 119, 25, 0.45), 0 18px 30px rgba(183, 255, 90, 0.18);
+  color: #102014;
+}
+
+.secondaryButton {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f7fbf6;
+}
+
+.landingStats,
+.teamMetrics {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.statPill {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.statPill span {
+  color: #a8b7b0;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.statPill strong {
+  color: #fff;
+  font-size: 16px;
+  line-height: 1.1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phoneShell {
+  background: #081019;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.appHeader {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: calc(18px + env(safe-area-inset-top)) 16px 13px;
+}
+
+.appHeader h1 {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  line-height: 1.08;
+  margin: 4px 0 0;
+}
+
+.headerActions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 9px;
+}
+
+.iconButton,
+.avatarButton {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #fff;
+  display: grid;
+  height: 42px;
+  justify-items: center;
+  width: 42px;
+}
+
+.avatarButton {
+  background: #f5c65b;
+  color: #102014;
+  font-weight: 1000;
+}
+
+.contentScroller {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 18px;
+}
+
+.viewStack {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 12px;
+}
+
+.scoreHero,
+.teamHero,
+.profileCard,
+.panel {
+  border-radius: 8px;
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.18);
+}
+
+.scoreHero {
+  align-items: end;
+  background:
+    linear-gradient(135deg, rgba(21, 69, 47, 0.94), rgba(19, 35, 54, 0.84)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px 48px);
+  border: 1px solid rgba(183, 255, 90, 0.19);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 166px;
+  padding: 18px;
+}
+
+.scoreHero h2 {
+  color: #fff;
+  font-size: 29px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  line-height: 1.04;
+  margin-top: 7px;
+}
+
+.scoreHero p:not(.kicker) {
+  color: #d6e5d7;
+  font-size: 14px;
+  line-height: 1.35;
+  margin-top: 8px;
+}
+
+.scoreBadge {
+  align-items: center;
+  background: #b7ff5a;
+  border-radius: 8px;
+  color: #102014;
+  display: grid;
+  height: 82px;
+  justify-items: center;
+  padding: 8px;
+  width: 82px;
+}
+
+.scoreBadge span {
+  font-size: 32px;
+  font-weight: 1000;
+  line-height: 1;
+}
+
+.scoreBadge small {
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.cardGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.quickCard,
+.teamRankCard,
+.teamListCard {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #fff;
+  display: grid;
+  min-width: 0;
+  text-align: left;
+}
+
+.quickCard {
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 78px;
+  padding: 12px;
+}
+
+.quickIcon {
+  align-items: center;
+  background: rgba(183, 255, 90, 0.13);
+  border: 1px solid rgba(183, 255, 90, 0.24);
+  border-radius: 8px;
+  color: #b7ff5a;
+  display: grid;
+  height: 38px;
+  justify-items: center;
+  width: 38px;
+}
+
+.quickCard span:nth-child(2),
+.teamListCard span:nth-child(2),
+.rankMain,
+.rosterRow span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.quickCard small,
+.teamRankCard small,
+.teamListCard small,
+.rosterRow small {
+  color: #a8b7b0;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 850;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickCard strong,
+.teamRankCard strong,
+.teamListCard strong,
+.rosterRow strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quickCard em {
+  color: #cddad2;
+  font-size: 12px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel {
+  background: rgba(13, 25, 37, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  padding: 14px;
+}
+
+.panelTitle {
+  margin-bottom: 12px;
+}
+
+.panelTitle h2 {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin-top: 4px;
+}
+
+.activityList,
+.settingsList,
+.installList,
+.rosterList,
+.teamList,
+.standingsList,
+.messageList {
+  display: grid;
+  gap: 9px;
+}
+
+.activityItem,
+.instructionStep,
+.rosterRow {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 52px;
+  padding: 10px;
+}
+
+.activityItem span {
+  color: #9fb2aa;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.activityItem strong {
+  color: #fff;
+  font-size: 14px;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.teamRankCard {
+  gap: 11px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 76px;
+  padding: 12px;
+  position: relative;
+}
+
+.teamRankCard::before,
+.teamListCard::before {
+  background: var(--team-color);
+  border-radius: 999px;
+  content: "";
+  inset: 14px auto 14px 0;
+  position: absolute;
+  width: 4px;
+}
+
+.userTeamCard {
+  border-color: rgba(183, 255, 90, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(183, 255, 90, 0.2);
+}
+
+.rankNumber {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #fff;
+  display: grid;
+  font-size: 18px;
+  font-weight: 1000;
+  height: 42px;
+  justify-items: center;
+  width: 42px;
+}
+
+.rankScore {
+  display: grid;
+  justify-items: end;
+}
+
+.rankScore strong {
+  color: #b7ff5a;
+  font-size: 19px;
+}
+
+.teamListCard {
+  gap: 11px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 68px;
+  padding: 10px 12px;
+  position: relative;
+}
+
+.teamSwatch {
+  background: var(--team-color);
+  border-radius: 8px;
+  height: 38px;
+  width: 38px;
+}
+
+.backButton {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  justify-self: start;
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.teamHero {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--team-color) 24%, transparent), rgba(19, 35, 54, 0.94)),
+    #0d1925;
+  border: 1px solid color-mix(in srgb, var(--team-color) 36%, rgba(255, 255, 255, 0.08));
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+}
+
+.teamHero h2 {
+  color: #fff;
+  font-size: 30px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.teamHero p:not(.kicker),
+.profileCard p:not(.kicker),
+.detailText {
+  color: #d4e0d8;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.rosterRow b {
+  color: #b7ff5a;
+  font-size: 19px;
+}
+
+.chatView {
+  display: grid;
+  gap: 12px;
+  min-height: 100%;
+  padding-bottom: 12px;
+}
+
+.messageBubble {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: grid;
+  gap: 7px;
+  padding: 11px;
+}
+
+.messageBubble div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.messageBubble strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.messageBubble span,
+.messageBubble small {
+  color: #9fb2aa;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.messageBubble p {
+  color: #dde8df;
+  font-size: 14px;
+  line-height: 1.42;
+  margin: 0;
+}
+
+.composer {
+  background: rgba(8, 16, 25, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  bottom: 0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 8px;
+  position: sticky;
+}
+
+.composer input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  min-height: 44px;
+  min-width: 0;
+  outline: 0;
+  padding: 0 12px;
+}
+
+.composer input::placeholder {
+  color: #8fa19a;
+}
+
+.composer button {
+  align-items: center;
+  background: #b7ff5a;
+  border: 0;
+  border-radius: 8px;
+  color: #102014;
+  display: grid;
+  height: 44px;
+  justify-items: center;
+  width: 48px;
+}
+
+.profileCard {
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(245, 198, 91, 0.22), rgba(13, 25, 37, 0.94)),
+    #0d1925;
+  border: 1px solid rgba(245, 198, 91, 0.22);
+  display: grid;
+  gap: 13px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 16px;
+}
+
+.profileAvatar {
+  align-items: center;
+  background: #f5c65b;
+  border-radius: 8px;
+  color: #102014;
+  display: grid;
+  font-size: 24px;
+  font-weight: 1000;
+  height: 58px;
+  justify-items: center;
+  width: 58px;
+}
+
+.profileCard h2 {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 1000;
+  letter-spacing: 0;
+  line-height: 1.12;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.instructionStep {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.instructionStep > span {
+  align-items: center;
+  background: rgba(183, 255, 90, 0.12);
+  border-radius: 8px;
+  color: #b7ff5a;
+  display: grid;
+  height: 36px;
+  justify-items: center;
+  width: 36px;
+}
+
+.instructionStep strong,
+.instructionStep small {
+  display: block;
+}
+
+.instructionStep strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.instructionStep small {
+  color: #a8b7b0;
+  font-size: 12px;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
+.logoutButton {
+  background: rgba(230, 95, 69, 0.12);
+  border: 1px solid rgba(230, 95, 69, 0.32);
+  color: #ffb7aa;
+  margin-top: 12px;
+  width: 100%;
+}
+
+.bottomNav {
+  background: rgba(8, 16, 25, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+}
+
+.bottomNav button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: #8fa19a;
+  display: grid;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 4px;
+  justify-items: center;
+  min-height: 50px;
+  padding: 5px 2px;
+}
+
+.bottomNav button svg {
+  display: block;
+}
+
+.bottomNav .bottomNavActive {
+  background: rgba(183, 255, 90, 0.12);
+  color: #b7ff5a;
+}
+
+@media (min-width: 720px) {
+  .mobileApp {
+    padding: 24px;
+  }
+
+  .landingShell,
+  .phoneShell {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42);
+    min-height: calc(100svh - 48px);
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 360px) {
+  .landingCopy h2 {
+    font-size: 32px;
+  }
+
+  .scoreHero,
+  .profileCard {
+    grid-template-columns: 1fr;
+  }
+
+  .scoreBadge {
+    height: 70px;
+    width: 70px;
+  }
+}
